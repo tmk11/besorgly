@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Besorgly: Einfacher Einkaufsservice für ältere Menschen: Netto, dm, Lidl und Aldi.">
+    <title>Besorgly | Einkauf einfach bestellen</title>
+    <link rel="stylesheet" href="styles.css?v=entry-mode-20260608">
+</head>
+<body>
+    <header class="top-header" id="top">
+        <div class="header-inner">
+            <a class="brand" href="#top" aria-label="Besorgly Startseite">
+                <img class="brand-logo" src="besorgly-logo.jpg?v=besorgly-brand-20260608" alt="Besorgly">
+            </a>
+
+            <div class="header-actions">
+                <button class="contrast-toggle" id="contrastToggle" type="button" aria-pressed="false">
+                    Dunkelmodus
+                </button>
+                <a class="quick-order" href="#bestellen">Bestellen</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="hero-content">
+                <p class="service-label">Besorgly · Für Netto, dm, Lidl und Aldi</p>
+                <h1 id="hero-title">Wir kaufen für Sie ein.</h1>
+                <p class="hero-text">
+                    Einfach die gewünschten Produkte eintragen. Wir kaufen sie im Supermarkt und bringen sie zu Ihnen.
+                </p>
+
+                <div class="hero-buttons">
+                    <a class="button button-primary" href="#bestellen">Bestellung ausfüllen</a>
+                    <a class="button button-secondary" href="#kosten">Kosten ansehen</a>
+                </div>
+            </div>
+
+            <aside class="important-box" aria-label="Wichtige Hinweise">
+                <h2>Wichtig zu wissen</h2>
+                <ul>
+                    <li><strong>Sie zahlen den Kassenbon</strong> vom Supermarkt.</li>
+                    <li><strong>Plus 8,50 €</strong> feste Einkaufsgebühr.</li>
+                    <li><strong>Maximal 80,00 €</strong> geschätzter Warenwert pro Bestellung.</li>
+                    <li><strong>Testgebiet:</strong> Lieferung aktuell nur in ausgewählten Bereichen von Rheydt-Odenkirchen.</li>
+                    <li><strong>Ab 2 Supermärkten:</strong> 2,00 € je Supermarkt zusätzlich.</li>
+                    <li><strong>Keine schweren Artikel</strong> wie Wasserkästen oder Getränkekisten.</li>
+                </ul>
+            </aside>
+        </section>
+
+        <section class="cost-section" id="kosten" aria-labelledby="kosten-title">
+            <div class="section-title">
+                <span>Preise</span>
+                <h2 id="kosten-title">So berechnen wir die Kosten</h2>
+            </div>
+
+            <div class="cost-cards">
+                <article class="cost-card">
+                    <span class="card-number">1</span>
+                    <h3>Kassenbon</h3>
+                    <p>Sie zahlen genau den Betrag, der auf dem Supermarkt-Kassenbon steht.</p>
+                </article>
+                <article class="cost-card">
+                    <span class="card-number">2</span>
+                    <h3>8,50 € Gebühr</h3>
+                    <p>Diese feste Gebühr kommt für den Einkauf dazu.</p>
+                </article>
+                <article class="cost-card">
+                    <span class="card-number">3</span>
+                    <h3>Mehrere Märkte</h3>
+                    <p>Wenn wir in 2 oder mehr Supermärkte gehen, kommen 2,00 € je Supermarkt dazu.</p>
+                </article>
+                <article class="cost-card">
+                    <span class="card-number">4</span>
+                    <h3>Maximal 80,00 €</h3>
+                    <p>Der geschätzte Warenwert pro Bestellung darf höchstens 80,00 € betragen.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="loyalty-section" id="treuepunkte" aria-labelledby="loyalty-title">
+            <div class="section-title">
+                <span>Treuepunkte</span>
+                <h2 id="loyalty-title">8 Bestellungen = 1 kostenlose Lieferung</h2>
+                <p>
+                    Nach 8 erfolgreich gespeicherten Bestellungen erhalten Sie 1 Bestellung mit kostenloser Lieferung.
+                    Den Kassenbonbetrag zahlen Sie weiterhin wie gewohnt.
+                </p>
+            </div>
+
+            <div class="loyalty-grid">
+                <article class="loyalty-card">
+                    <span class="card-number">★</span>
+                    <h3>So sammeln Sie Punkte</h3>
+                    <p>Jede erfolgreich eingegangene Bestellung zählt als 1 Punkt. Bei 8 Punkten gibt es 1 kostenlose Lieferung.</p>
+                </article>
+
+                <form class="panel loyalty-form" id="loyaltyForm">
+                    <div class="panel-title">
+                        <span class="step-badge">✓</span>
+                        <div>
+                            <h3>Punkte prüfen</h3>
+                            <p>Bitte geben Sie dieselbe Adresse und Telefonnummer wie bei der Bestellung ein.</p>
+                        </div>
+                    </div>
+
+                    <label class="field">
+                        <span>Telefonnummer *</span>
+                        <input id="loyaltyPhone" name="loyaltyPhone" type="tel" autocomplete="tel" required placeholder="Telefonnummer">
+                    </label>
+
+                    <label class="field">
+                        <span>Adresse *</span>
+                        <input id="loyaltyAddress" name="loyaltyAddress" type="text" autocomplete="street-address" required placeholder="Straße, Hausnummer, PLZ, Ort">
+                    </label>
+                    <div class="address-check-result loyalty-address-result" id="loyaltyAddressResult" aria-live="polite" hidden></div>
+
+                    <button class="button button-primary full-width" id="checkLoyalty" type="submit">Treuepunkte anzeigen</button>
+                    <div class="loyalty-result" id="loyaltyResult" aria-live="polite" hidden></div>
+                </form>
+            </div>
+        </section>
+
+        <section class="market-notice" aria-labelledby="market-notice-title">
+            <div class="notice-icon" aria-hidden="true">ℹ️</div>
+            <div>
+                <h2 id="market-notice-title">Aktueller Hinweis</h2>
+                <p>
+                    Aktuell arbeiten wir nur in wenigen Testgebieten im Bereich Rheydt-Odenkirchen.
+                    Beim Absenden prüfen wir automatisch, ob Ihre Adresse aktuell im Liefergebiet liegt.
+                    Wir werden den Service in nächster Zeit erweitern.
+                </p>
+                <p>
+                    Wir testen unseren Einkaufsservice derzeit noch am Markt. Im Moment erhalten wir sehr viele
+                    Bestellungen. Deshalb können leider nicht alle Bestellungen angenommen werden.
+                </p>
+                <p>
+                    Wir bemühen uns, so viele Bestellungen wie möglich zu erfüllen. Vielen Dank für Ihr Verständnis.
+                </p>
+            </div>
+        </section>
+
+        <section class="order-section" id="bestellen" aria-labelledby="bestellen-title">
+            <div class="section-title">
+                <span>Bestellung</span>
+                <h2 id="bestellen-title">Ihre Einkaufsliste</h2>
+                <p>Felder mit * müssen ausgefüllt werden.</p>
+            </div>
+
+            <div class="order-grid">
+                <div class="forms-column">
+                    <form class="panel" id="customerForm">
+                        <div class="panel-title">
+                            <span class="step-badge">1</span>
+                            <div>
+                                <h3>Ihre Daten</h3>
+                                <p>Damit wir Sie erreichen und liefern können.</p>
+                            </div>
+                        </div>
+
+                        <div class="field-grid">
+                            <label class="field">
+                                <span>Name *</span>
+                                <input id="customerName" name="customerName" type="text" autocomplete="name" required placeholder="Max Mustermann">
+                            </label>
+
+                            <label class="field">
+                                <span>Telefon *</span>
+                                <input id="customerPhone" name="customerPhone" type="tel" autocomplete="tel" required placeholder="Telefonnummer">
+                            </label>
+
+                            <div class="field field-wide">
+                                <label class="field-label" for="customerAddress">Adresse *</label>
+                                <div class="address-check-row">
+                                    <input id="customerAddress" name="customerAddress" type="text" autocomplete="street-address" required placeholder="Straße, Hausnummer, PLZ, Ort">
+                                    <button class="button button-secondary" id="checkAddress" type="button">Adresse prüfen</button>
+                                </div>
+                                <small class="field-help">Aktuell nur in ausgewählten Testbereichen von Rheydt-Odenkirchen.</small>
+                                <div class="address-check-result" id="addressCheckResult" aria-live="polite" hidden></div>
+                            </div>
+
+                            <label class="field">
+                                <span>Lieferzeitfenster *</span>
+                                <select id="deliveryTime" name="deliveryTime" required></select>
+                                <small class="field-help">Bestellungen bis 10:00 Uhr: Lieferung 12:00–14:00 Uhr. Bis 14:00 Uhr: Lieferung 16:00–18:00 Uhr. Danach: nächster Tag.</small>
+                            </label>
+
+                            <label class="field">
+                                <span>Kontakt am besten per</span>
+                                <select id="contactWay" name="contactWay">
+                                    <option value="Telefon">Telefon</option>
+                                    <option value="WhatsApp">WhatsApp</option>
+                                    <option value="SMS">SMS</option>
+                                    <option value="E-Mail">E-Mail</option>
+                                </select>
+                            </label>
+
+                            <label class="field field-wide">
+                                <span>Hinweis für die Lieferung</span>
+                                <textarea id="deliveryNote" name="deliveryNote" rows="3" placeholder="Zum Beispiel: 2. Etage, Klingel links"></textarea>
+                            </label>
+                        </div>
+                    </form>
+
+                    <form class="panel simple-list-panel" id="itemForm">
+                        <div class="panel-title">
+                            <span class="step-badge">2</span>
+                            <div>
+                                <h3>Einkaufsliste angeben</h3>
+                                <p>Wählen Sie bitte, ob Sie einen Zettel fotografieren oder die Produkte direkt eintippen möchten.</p>
+                            </div>
+                        </div>
+
+                        <fieldset class="entry-mode-choice" aria-label="Art der Eingabe wählen">
+                            <legend>Wie möchten Sie bestellen?</legend>
+                            <label class="entry-mode-card">
+                                <input id="entryModePhoto" type="radio" name="entryMode" value="photo" checked>
+                                <span>
+                                    <strong>📷 Einkaufszettel fotografieren</strong>
+                                    <small>Am einfachsten: Zettel fotografieren oder mehrere Bilder auswählen.</small>
+                                </span>
+                            </label>
+                            <label class="entry-mode-card">
+                                <input id="entryModeProducts" type="radio" name="entryMode" value="products">
+                                <span>
+                                    <strong>✍️ Produkte direkt eingeben</strong>
+                                    <small>Für jedes Produkt eine eigene Zeile, mit optionalem Foto.</small>
+                                </span>
+                            </label>
+                        </fieldset>
+
+                        <section class="entry-mode-panel zettel-photo-panel" id="zettelPhotoPanel" aria-labelledby="photo-title">
+                            <h4 id="photo-title">Einkaufszettel als Foto</h4>
+                            <p class="photo-help">
+                                Sie können ein oder mehrere Fotos hochladen. Achten Sie bitte darauf, dass alles gut lesbar ist.
+                            </p>
+
+                            <div class="photo-actions">
+                                <label class="photo-button" for="cameraInput">
+                                    📷 Foto aufnehmen
+                                </label>
+                                <label class="photo-button secondary" for="photoUploadInput">
+                                    🖼️ Bild(er) auswählen
+                                </label>
+                            </div>
+
+                            <input class="visually-hidden" id="cameraInput" type="file" accept="image/*" capture="environment" multiple>
+                            <input class="visually-hidden" id="photoUploadInput" type="file" accept="image/*" multiple>
+
+                            <div class="photo-preview" id="photoPreview" aria-live="polite">
+                                <p>Noch kein Foto ausgewählt.</p>
+                            </div>
+                        </section>
+
+                        <section class="entry-mode-panel product-entry-panel" id="productEntryPanel" hidden>
+                            <h4>Produkte direkt eingeben</h4>
+                            <div class="product-rows" id="productRows" aria-live="polite"></div>
+
+                            <button class="button button-secondary full-width add-product-button" id="addProductRow" type="button">
+                                + Weiteres Produkt hinzufügen
+                            </button>
+                        </section>
+
+                        <p class="inline-warning" id="heavyWarning" hidden>
+                            Dieser Artikel ist wahrscheinlich zu schwer. Wasserkästen und Getränkekisten können wir zurzeit nicht einkaufen.
+                        </p>
+                    </form>
+                </div>
+
+                <aside class="panel summary-panel" aria-live="polite">
+                    <div class="panel-title">
+                        <span class="step-badge">3</span>
+                        <div>
+                            <h3>Prüfen und absenden</h3>
+                            <p>Hier sehen Sie Ihre Einkaufsliste, Fotos und Gebühren.</p>
+                        </div>
+                    </div>
+
+                    <div class="empty-state" id="emptyState">
+                        <span aria-hidden="true">🧺</span>
+                        <p>Noch keine Einkaufsliste oder Fotos hinzugefügt.</p>
+                    </div>
+
+                    <div class="item-list" id="itemList"></div>
+
+                    <div class="photo-summary" id="photoSummary" hidden></div>
+
+                    <div class="fee-box" id="feeBox" hidden>
+                        <h4>Gebühren</h4>
+                        <div class="fee-row">
+                            <span>Supermärkte</span>
+                            <strong id="marketCount">0</strong>
+                        </div>
+                        <div class="fee-row">
+                            <span>Kassenbon</span>
+                            <strong>genauer Betrag</strong>
+                        </div>
+                        <div class="fee-row">
+                            <span>Einkaufsgebühr</span>
+                            <strong>8,50 €</strong>
+                        </div>
+                        <div class="fee-row">
+                            <span>Mehrmarkt-Zuschlag</span>
+                            <strong id="marketSurcharge">0,00 €</strong>
+                        </div>
+                        <div class="fee-row total">
+                            <span>Servicegebühr</span>
+                            <strong id="totalFee">0,00 €</strong>
+                        </div>
+                        <p class="fee-note">Der Kassenbonbetrag kommt noch dazu.</p>
+                    </div>
+
+                    <button class="button button-success full-width" id="submitOrder" type="button" disabled>
+                        Bestellung absenden
+                    </button>
+                </aside>
+            </div>
+        </section>
+
+        <section class="order-status-section is-collapsed" id="orderStatusSection" aria-labelledby="order-status-title" tabindex="-1" hidden>
+            <button class="status-panel-toggle" id="statusPanelToggle" type="button" aria-expanded="false" aria-controls="statusPanelBody">
+                <span class="status-panel-icon" aria-hidden="true">🧾</span>
+                <span class="status-panel-text">
+                    <strong>Bestellung verfolgen</strong>
+                    <small id="statusPanelSummary">Antippen zum Öffnen</small>
+                </span>
+                <span class="status-panel-count" id="statusPanelCount">0</span>
+            </button>
+            <div class="status-panel-body" id="statusPanelBody">
+                <div class="section-title">
+                    <span>Immer sichtbar</span>
+                    <h2 id="order-status-title">Bestellung verfolgen</h2>
+                    <p>Der aktuelle Stand bleibt hier sichtbar. In den ersten 5 Minuten können Sie stornieren.</p>
+                </div>
+                <div class="order-status-list" id="orderStatusList" aria-live="polite"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>© 2026 Besorgly. Einfacher Einkaufsservice für Netto, dm, Lidl und Aldi.</p>
+    </footer>
+
+    <div class="modal-backdrop" id="orderModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+        <div class="modal-card">
+            <button class="modal-close" id="closeModal" type="button" aria-label="Fenster schließen">×</button>
+            <h2 id="modalTitle">Bestellung prüfen</h2>
+            <p class="modal-help">Bitte kontrollieren Sie Name, Telefonnummer, Adresse und Einkaufsliste. Wenn alles stimmt, bestätigen Sie die Bestellung.</p>
+            <div id="customerOrderSummary" class="customer-order-summary"></div>
+            <div class="modal-photo-list" id="modalPhotoList" hidden></div>
+            <div class="modal-actions">
+                <button class="button button-success" id="confirmOrder" type="button">Bestellung bestätigen</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js?v=entry-mode-20260608"></script>
+</body>
+</html>

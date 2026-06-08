@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Besorgly</title>
+    <link rel="stylesheet" href="admin.css?v=admin-tabs-20260608">
+</head>
+<body>
+    <main class="admin-shell">
+        <section class="login-card" id="loginCard">
+            <div class="login-header">
+                <span class="logo">🛒</span>
+                <div>
+                    <h1>Admin Login</h1>
+                    <p>Besorgly Bestellungen verwalten</p>
+                </div>
+            </div>
+
+            <form id="loginForm" class="login-form">
+                <label>
+                    <span>Admin-Passwort</span>
+                    <input id="adminPassword" type="password" autocomplete="current-password" required autofocus>
+                </label>
+                <button class="button button-primary" type="submit">Einloggen</button>
+            </form>
+            <p class="message" id="loginMessage" aria-live="polite"></p>
+        </section>
+
+        <section class="dashboard" id="dashboard" hidden>
+            <header class="dashboard-header">
+                <div>
+                    <p class="eyebrow">Adminbereich</p>
+                    <h1>Bestellungen</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="button button-secondary" id="refreshOrders" type="button">Aktualisieren</button>
+                    <button class="button button-danger" id="logoutButton" type="button">Ausloggen</button>
+                </div>
+            </header>
+
+            <section class="filters" aria-label="Bestellungen filtern">
+                <label>
+                    <span>Suchen</span>
+                    <input id="searchInput" type="search" placeholder="Name, Telefon, Adresse, Bestellnummer">
+                </label>
+                <label>
+                    <span>Status</span>
+                    <select id="statusFilter">
+                        <option value="all">Alle</option>
+                        <option value="new">Neu</option>
+                        <option value="deposit_pending">Anzahlung offen</option>
+                        <option value="accepted">Angenommen</option>
+                        <option value="shopping">Beim Einkauf</option>
+                        <option value="delivered">Geliefert</option>
+                        <option value="rejected">Abgelehnt</option>
+                        <option value="cancelled">Vom Kunden storniert</option>
+                    </select>
+                </label>
+            </section>
+
+            <nav class="view-tabs" aria-label="Admin Ansicht wählen">
+                <button class="view-tab active" type="button" data-view="time">Zeitblöcke</button>
+                <button class="view-tab" type="button" data-view="market">Supermärkte</button>
+                <button class="view-tab" type="button" data-view="history">Historie</button>
+            </nav>
+
+            <div class="admin-grid">
+                <section class="orders-panel" aria-labelledby="ordersTitle">
+                    <div class="panel-title">
+                        <h2 id="ordersTitle">Alle Bestellungen</h2>
+                        <span id="ordersCount">0</span>
+                    </div>
+                    <div class="orders-list" id="ordersList"></div>
+                </section>
+
+                <section class="detail-panel" id="detailPanel" aria-live="polite">
+                    <div class="empty-detail">
+                        <span>📋</span>
+                        <p>Bitte wählen Sie links eine Bestellung aus.</p>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+
+    <script src="admin.js?v=admin-tabs-20260608"></script>
+</body>
+</html>
