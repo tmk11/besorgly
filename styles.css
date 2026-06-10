@@ -1450,6 +1450,38 @@ body.dark-mode .badge.cheapest {
     font-weight: 700;
 }
 
+.privacy-note {
+    margin: 14px 0 0;
+    font-size: 0.98rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+.privacy-note a {
+    color: var(--accent-dark);
+    text-decoration: underline;
+    font-weight: 700;
+}
+
+.contact-section {
+    width: min(1120px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 48px 0 26px;
+    text-align: center;
+}
+
+.contact-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 22px;
+}
+
+.contact-phone {
+    font-size: 1.3rem;
+}
+
 .footer {
     padding: 28px 0 40px;
     color: var(--muted);
@@ -1458,6 +1490,62 @@ body.dark-mode .badge.cheapest {
 
 .footer p {
     margin-bottom: 0;
+}
+
+.footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 1.05rem;
+}
+
+.footer-links a {
+    color: var(--text);
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+.legal-page {
+    width: min(820px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 40px 0 56px;
+}
+
+.legal-page h1 {
+    font-size: clamp(2rem, 5vw, 2.8rem);
+    margin: 0 0 8px;
+}
+
+.legal-page h2 {
+    font-size: 1.35rem;
+    margin: 32px 0 10px;
+}
+
+.legal-page p,
+.legal-page li {
+    font-size: 1.08rem;
+    color: var(--text);
+}
+
+.legal-page ul {
+    padding-left: 24px;
+}
+
+.legal-intro {
+    color: var(--muted);
+    font-size: 1.12rem;
+}
+
+.legal-link {
+    color: var(--accent-dark);
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+body.dark-mode .privacy-note a,
+body.dark-mode .legal-link {
+    color: var(--accent-dark);
 }
 
 .modal-backdrop {

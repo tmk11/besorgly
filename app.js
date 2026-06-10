@@ -8,6 +8,10 @@ const COVERAGE_ENDPOINT = "/api/coverage";
 const SERVICE_AREA_LABEL = "ausgewählte Testbereiche von Rheydt-Odenkirchen";
 const ORDER_STATUS_STORAGE_KEY = "shoppingOrderStatuses";
 const ORDER_STATUS_POLL_MS = 15000;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const PHOTO_MAX_DIMENSION = 1600;
+const PHOTO_COMPRESSION_QUALITY = 0.8;
+const PHOTO_COMPRESSION_MIN_BYTES = 500 * 1024;
 const DELIVERY_BLOCKS = [
     {
         cutoffHour: 10,
@@ -918,19 +922,84 @@ function removeItem(event) {
     removeProductRow(removeButton.dataset.id);
 }
 
-function handleProductPhotoFiles(event) {
+async function loadImageSource(file) {
+    if (typeof createImageBitmap === "function") {
+        return createImageBitmap(file);
+    }
+
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(image);
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("image_decode_failed"));
+        };
+        image.src = url;
+    });
+}
+
+async function compressPhotoFile(file) {
+    if (!file.type.startsWith("image/") || file.size <= PHOTO_COMPRESSION_MIN_BYTES) {
+        return file;
+    }
+
+    try {
+        const source = await loadImageSource(file);
+        const width = source.width || source.naturalWidth;
+        const height = source.height || source.naturalHeight;
+        const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(width, height));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+
+        if (typeof source.close === "function") {
+            source.close();
+        }
+
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob(resolve, "image/jpeg", PHOTO_COMPRESSION_QUALITY);
+        });
+
+        if (!blob || blob.size >= file.size) {
+            return file;
+        }
+
+        const baseName = (file.name || "foto").replace(/\.[^.]+$/, "");
+        return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+    } catch {
+        return file;
+    }
+}
+
+function compressPhotoFiles(files) {
+    return Promise.all(files.map((file) => compressPhotoFile(file)));
+}
+
+function totalUploadBytes() {
+    return getAllPhotos().reduce((total, photo) => total + (photo.size || 0), 0);
+}
+
+async function handleProductPhotoFiles(event) {
     const input = event.target.closest(".product-photo-input");
     if (!input) {
         return;
     }
 
     const item = state.items.find((currentItem) => currentItem.id === input.dataset.id);
-    const files = Array.from(input.files || []).filter((file) => file.type.startsWith("image/"));
+    const selectedFiles = Array.from(input.files || []).filter((file) => file.type.startsWith("image/"));
 
-    if (!item || files.length === 0) {
+    if (!item || selectedFiles.length === 0) {
         showToast("Bitte wählen Sie ein Foto aus.");
         return;
     }
+
+    const files = await compressPhotoFiles(selectedFiles);
 
     const newPhotos = files.map((file) => {
         const id = createId();
@@ -968,13 +1037,15 @@ function removeProductPhoto(itemId, photoId) {
     showToast("Foto wurde entfernt.");
 }
 
-function handlePhotoFiles(event) {
-    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
+async function handlePhotoFiles(event) {
+    const selectedFiles = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
 
-    if (files.length === 0) {
+    if (selectedFiles.length === 0) {
         showToast("Bitte wählen Sie ein Foto aus.");
         return;
     }
+
+    const files = await compressPhotoFiles(selectedFiles);
 
     const newPhotos = files.map((file) => {
         const id = createId();
@@ -1239,15 +1310,41 @@ async function submitOrderToServer() {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok || !result.ok) {
+        if (response.status === 413) {
+            throw new Error("too_large");
+        }
         throw new Error(result.error || "upload_failed");
     }
 
     return result;
 }
 
+function uploadErrorMessage(error) {
+    const code = error?.message || "";
+
+    if (code === "too_large") {
+        return "Die Fotos sind zusammen zu groß. Bitte entfernen Sie einige Fotos und versuchen Sie es erneut.";
+    }
+
+    if (code === "outside_service_area") {
+        return "Diese Adresse liegt leider noch außerhalb unseres aktuellen Test-Liefergebiets.";
+    }
+
+    if (code === "address_not_found") {
+        return "Ihre Adresse wurde nicht gefunden. Bitte prüfen Sie Straße, Hausnummer, PLZ und Ort.";
+    }
+
+    return "Senden nicht möglich. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.";
+}
+
 async function openOrderModal() {
     if (!hasOrderContent()) {
         showToast("Bitte fügen Sie mindestens ein Produkt oder ein Foto hinzu.");
+        return;
+    }
+
+    if (totalUploadBytes() > MAX_UPLOAD_BYTES - 1024 * 1024) {
+        showToast("Die Fotos sind zusammen zu groß. Bitte entfernen Sie einige Fotos.", 6200);
         return;
     }
 
@@ -1315,8 +1412,8 @@ async function finishOrder() {
             }
         }
         showToast(buildLoyaltySuccessMessage(result), 6200);
-    } catch {
-        showToast("Senden nicht möglich. Bitte versuchen Sie es erneut oder kopieren Sie den Text.");
+    } catch (error) {
+        showToast(uploadErrorMessage(error), 6200);
     } finally {
         confirmOrder.disabled = false;
         confirmOrder.textContent = "Bestellung bestätigen";

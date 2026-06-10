@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-import cgi
+import io
 import json
 import mimetypes
 import os
@@ -10,6 +10,8 @@ import shutil
 import time
 import math
 from datetime import datetime, timezone
+from email import policy
+from email.parser import BytesParser
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,6 +34,43 @@ SERVICE_ORIGIN_LON = 6.4466562
 MAX_SERVICE_DISTANCE_KM = 2.0
 GEOCODER_URL = "https://photon.komoot.io/api/"
 ROUTER_URL = "https://router.project-osrm.org/route/v1/driving/"
+
+
+class FormFile:
+    def __init__(self, filename, content_type, data):
+        self.filename = filename
+        self.type = content_type
+        self.file = io.BytesIO(data)
+
+
+def parse_multipart_form(rfile, content_type, content_length):
+    """Parse a multipart/form-data body without the removed cgi module.
+
+    Returns (fields, files): fields maps name -> list of str values,
+    files maps name -> list of FormFile.
+    """
+    body = rfile.read(content_length)
+    header = b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode("latin-1") + b"\r\n\r\n"
+    message = BytesParser(policy=policy.HTTP).parsebytes(header + body)
+
+    if not message.is_multipart():
+        raise ValueError("multipart_required")
+
+    fields = {}
+    files = {}
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+
+        payload = part.get_payload(decode=True) or b""
+        filename = part.get_filename()
+        if filename:
+            files.setdefault(name, []).append(FormFile(filename, part.get_content_type(), payload))
+        else:
+            fields.setdefault(name, []).append(payload.decode("utf-8", errors="replace"))
+
+    return fields, files
 
 
 def safe_filename(filename):
@@ -617,18 +656,14 @@ class UploadHandler(BaseHTTPRequestHandler):
             json_response(self, 400, {"error": "multipart_required"})
             return
 
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={
-                "REQUEST_METHOD": "POST",
-                "CONTENT_TYPE": content_type,
-                "CONTENT_LENGTH": str(content_length),
-            },
-        )
+        try:
+            fields, files = parse_multipart_form(self.rfile, content_type, content_length)
+        except Exception:
+            json_response(self, 400, {"error": "invalid_multipart"})
+            return
 
-        order_text = form.getfirst("orderText", "").strip()
-        payload_raw = form.getfirst("payload", "{}").strip() or "{}"
+        order_text = fields.get("orderText", [""])[0].strip()
+        payload_raw = fields.get("payload", ["{}"])[0].strip() or "{}"
 
         try:
             payload = json.loads(payload_raw)
@@ -680,15 +715,13 @@ class UploadHandler(BaseHTTPRequestHandler):
         photo_dir.mkdir(parents=True, exist_ok=False)
 
         saved_photos = []
-        photo_fields = form["photos"] if "photos" in form else []
-        if not isinstance(photo_fields, list):
-            photo_fields = [photo_fields]
+        photo_fields = files.get("photos", [])
 
         for index, photo in enumerate(photo_fields[:MAX_PHOTOS], start=1):
-            if not getattr(photo, "filename", None):
+            if not photo.filename:
                 continue
 
-            content_type = getattr(photo, "type", "") or "application/octet-stream"
+            content_type = photo.type or "application/octet-stream"
             if not content_type.startswith("image/"):
                 continue
 
