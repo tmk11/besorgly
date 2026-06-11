@@ -34,6 +34,16 @@ SERVICE_ORIGIN_LON = 6.4466562
 MAX_SERVICE_DISTANCE_KM = 2.0
 GEOCODER_URL = "https://photon.komoot.io/api/"
 ROUTER_URL = "https://router.project-osrm.org/route/v1/driving/"
+DEFAULT_MAX_ORDERS_PER_BLOCK = 6
+MAX_ORDERS_PER_BLOCK_LIMIT = 500
+TOUR_ACTIVE_STATUSES = {"new", "deposit_pending", "accepted", "shopping"}
+MARKET_GEOCODE_QUERIES = {
+    "Netto": "Netto Marken-Discount, Odenkirchen, Mönchengladbach",
+    "dm": "dm-drogerie markt, Rheydt, Mönchengladbach",
+    "Lidl": "Lidl, Odenkirchen, Mönchengladbach",
+    "Aldi": "Aldi, Odenkirchen, Mönchengladbach",
+}
+BLOCK_KEY_RE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4}).*?(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})")
 
 
 class FormFile:
@@ -418,6 +428,217 @@ def customer_history_for_identity(storage_dir, customer):
     }
 
 
+def settings_path(storage_dir):
+    return storage_dir / "settings.json"
+
+
+def load_settings(storage_dir):
+    try:
+        data = json.loads(settings_path(storage_dir).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+
+    max_orders = data.get("maxOrdersPerBlock")
+    if not isinstance(max_orders, int) or max_orders < 0 or max_orders > MAX_ORDERS_PER_BLOCK_LIMIT:
+        max_orders = DEFAULT_MAX_ORDERS_PER_BLOCK
+
+    return {"maxOrdersPerBlock": max_orders}
+
+
+def save_settings(storage_dir, settings):
+    settings_path(storage_dir).write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def block_key_from_delivery_time(value):
+    match = BLOCK_KEY_RE.search(str(value or ""))
+    if not match:
+        return None
+
+    day, month, year, start_hour, start_minute, end_hour, end_minute = match.groups()
+    return f"{day}.{month}.{year} {int(start_hour):02d}:{start_minute}-{int(end_hour):02d}:{end_minute}"
+
+
+def block_usage(storage_dir):
+    usage = {}
+    for path in order_json_paths(storage_dir):
+        record = read_order_record(path)
+        if not record:
+            continue
+
+        if get_admin_status(record) in LOYALTY_INACTIVE_STATUSES:
+            continue
+
+        delivery_time = record.get("payload", {}).get("customer", {}).get("deliveryTime")
+        key = block_key_from_delivery_time(delivery_time)
+        if key:
+            usage[key] = usage.get(key, 0) + 1
+
+    return usage
+
+
+_market_location_cache = {}
+
+
+def market_location(market):
+    if market in _market_location_cache:
+        return _market_location_cache[market]
+
+    query = MARKET_GEOCODE_QUERIES.get(market, f"{market}, Mönchengladbach")
+    result = geocode_address(query)
+    if result is not None:
+        _market_location_cache[market] = result
+    return result
+
+
+def nearest_neighbor_route(start_lat, start_lon, stops):
+    """Order stops greedily by distance from the previous position."""
+    remaining = list(stops)
+    ordered = []
+    current = (start_lat, start_lon)
+
+    while remaining:
+        best = min(remaining, key=lambda stop: haversine_km(current[0], current[1], stop["lat"], stop["lon"]))
+        best["legKm"] = round(haversine_km(current[0], current[1], best["lat"], best["lon"]), 2)
+        ordered.append(best)
+        remaining.remove(best)
+        current = (best["lat"], best["lon"])
+
+    return ordered
+
+
+def google_maps_tour_url(stops):
+    if not stops:
+        return None
+
+    origin = f"{SERVICE_ORIGIN_LAT},{SERVICE_ORIGIN_LON}"
+    destination = f"{stops[-1]['lat']},{stops[-1]['lon']}"
+    waypoints = "|".join(f"{stop['lat']},{stop['lon']}" for stop in stops[:-1])
+    params = {"api": "1", "origin": origin, "destination": destination, "travelmode": "driving"}
+    if waypoints:
+        params["waypoints"] = waypoints
+    return "https://www.google.com/maps/dir/?" + urlencode(params)
+
+
+def build_tour(storage_dir, block_value):
+    block_key = block_key_from_delivery_time(block_value)
+    orders = []
+
+    for path in order_json_paths(storage_dir):
+        record = read_order_record(path)
+        if not record:
+            continue
+
+        if get_admin_status(record) not in TOUR_ACTIVE_STATUSES:
+            continue
+
+        delivery_time = record.get("payload", {}).get("customer", {}).get("deliveryTime")
+        if block_key_from_delivery_time(delivery_time) != block_key:
+            continue
+
+        orders.append(record)
+
+    orders.sort(key=lambda record: record.get("createdAt") or "")
+
+    market_items = {}
+    open_choice_items = []
+    photo_orders = []
+    customer_stops = []
+    unroutable_customers = []
+
+    for record in orders:
+        payload = record.get("payload", {})
+        customer = payload.get("customer", {})
+        order_id = record.get("orderId", "")
+        short_id = order_id.rsplit("-", 1)[-1]
+        customer_name = customer.get("name", "")
+
+        for item in payload.get("items", []):
+            entry = {
+                "orderId": order_id,
+                "shortId": short_id,
+                "customerName": customer_name,
+                "quantity": item.get("quantity", ""),
+                "name": item.get("name", ""),
+                "details": item.get("details", ""),
+                "preference": item.get("preference", "specific"),
+                "photoCount": len(item.get("photos", [])),
+            }
+            market = item.get("supermarket") or "Egal"
+            if market == "Egal":
+                open_choice_items.append(entry)
+            else:
+                market_items.setdefault(market, []).append(entry)
+
+        photo_count = len(record.get("photos", []))
+        if payload.get("entryMode") == "photo" and photo_count:
+            photo_orders.append({
+                "orderId": order_id,
+                "shortId": short_id,
+                "customerName": customer_name,
+                "photoCount": photo_count,
+            })
+
+        coverage = payload.get("coverage", {}) or {}
+        stop = {
+            "orderId": order_id,
+            "shortId": short_id,
+            "customerName": customer_name,
+            "phone": customer.get("phone", ""),
+            "address": customer.get("address", ""),
+            "deliveryNote": customer.get("deliveryNote", ""),
+            "status": get_admin_status(record),
+        }
+        if isinstance(coverage.get("lat"), (int, float)) and isinstance(coverage.get("lon"), (int, float)):
+            stop["lat"] = coverage["lat"]
+            stop["lon"] = coverage["lon"]
+            customer_stops.append(stop)
+        else:
+            unroutable_customers.append(stop)
+
+    market_stops = []
+    unroutable_markets = []
+    for market, items in sorted(market_items.items()):
+        location = market_location(market)
+        stop = {
+            "market": market,
+            "itemCount": len(items),
+            "items": items,
+        }
+        if location:
+            stop["lat"] = location["lat"]
+            stop["lon"] = location["lon"]
+            stop["address"] = location["suggestedAddress"]
+            market_stops.append(stop)
+        else:
+            unroutable_markets.append(stop)
+
+    ordered_markets = nearest_neighbor_route(SERVICE_ORIGIN_LAT, SERVICE_ORIGIN_LON, market_stops)
+    last_lat = ordered_markets[-1]["lat"] if ordered_markets else SERVICE_ORIGIN_LAT
+    last_lon = ordered_markets[-1]["lon"] if ordered_markets else SERVICE_ORIGIN_LON
+    ordered_customers = nearest_neighbor_route(last_lat, last_lon, customer_stops)
+
+    routed_stops = ordered_markets + ordered_customers
+    total_km = round(sum(stop.get("legKm", 0) for stop in routed_stops), 2)
+
+    return {
+        "blockKey": block_key,
+        "blockLabel": block_value,
+        "orderCount": len(orders),
+        "marketStops": ordered_markets,
+        "unroutableMarkets": unroutable_markets,
+        "deliveryStops": ordered_customers,
+        "unroutableCustomers": unroutable_customers,
+        "openChoiceItems": open_choice_items,
+        "photoOrders": photo_orders,
+        "totalKm": total_km,
+        "originAddress": SERVICE_ORIGIN_ADDRESS,
+        "mapsUrl": google_maps_tour_url(routed_stops),
+    }
+
+
 def load_admin_password(password_file):
     password = os.environ.get("EINKAUFSSERVICE_ADMIN_PASSWORD", "").strip()
     if password:
@@ -597,6 +818,15 @@ class UploadHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if parsed_url.path == "/capacity":
+            settings = load_settings(self.storage_dir)
+            json_response(self, 200, {
+                "ok": True,
+                "maxOrdersPerBlock": settings["maxOrdersPerBlock"],
+                "usage": block_usage(self.storage_dir),
+            })
+            return
+
         if parsed_url.path == "/customer-history":
             query = parse_qs(parsed_url.query)
             customer = {
@@ -692,6 +922,19 @@ class UploadHandler(BaseHTTPRequestHandler):
         if not order_text:
             json_response(self, 400, {"error": "order_text_required"})
             return
+
+        settings = load_settings(self.storage_dir)
+        max_per_block = settings["maxOrdersPerBlock"]
+        block_key = block_key_from_delivery_time(customer.get("deliveryTime"))
+        if max_per_block > 0 and block_key:
+            used = block_usage(self.storage_dir).get(block_key, 0)
+            if used >= max_per_block:
+                json_response(self, 409, {
+                    "error": "block_full",
+                    "blockKey": block_key,
+                    "maxOrdersPerBlock": max_per_block,
+                })
+                return
 
         customer_history = customer_history_for_identity(self.storage_dir, customer)
         payload["customerHistory"] = customer_history
@@ -819,6 +1062,20 @@ class UploadHandler(BaseHTTPRequestHandler):
             self.handle_admin_orders_list(parsed_url)
             return
 
+        if parsed_url.path == "/admin/settings":
+            json_response(self, 200, {"ok": True, "settings": load_settings(self.storage_dir)})
+            return
+
+        if parsed_url.path == "/admin/tour":
+            query = parse_qs(parsed_url.query)
+            block_value = query.get("block", [""])[0]
+            if not block_key_from_delivery_time(block_value):
+                json_response(self, 400, {"ok": False, "error": "block_required"})
+                return
+
+            json_response(self, 200, {"ok": True, "tour": build_tour(self.storage_dir, block_value)})
+            return
+
         photo_match = re.fullmatch(r"/admin/orders/([^/]+)/photos/(.+)", parsed_url.path)
         if photo_match:
             self.handle_admin_photo(unquote(photo_match.group(1)), unquote(photo_match.group(2)))
@@ -844,6 +1101,10 @@ class UploadHandler(BaseHTTPRequestHandler):
             return
 
         if not self.require_admin():
+            return
+
+        if parsed_url.path == "/admin/settings":
+            self.handle_admin_settings_update()
             return
 
         status_match = re.fullmatch(r"/admin/orders/([^/]+)/status", parsed_url.path)
@@ -873,6 +1134,27 @@ class UploadHandler(BaseHTTPRequestHandler):
         token = secrets.token_urlsafe(32)
         self.admin_sessions[token] = {"createdAt": time.time(), "expiresAt": time.time() + ADMIN_SESSION_SECONDS}
         json_response(self, 200, {"ok": True}, {"Set-Cookie": admin_cookie_header(token)})
+
+    def handle_admin_settings_update(self):
+        try:
+            data = read_json_body(self)
+        except json.JSONDecodeError:
+            json_response(self, 400, {"ok": False, "error": "invalid_json"})
+            return
+
+        try:
+            max_orders = int(data.get("maxOrdersPerBlock"))
+        except (TypeError, ValueError):
+            json_response(self, 400, {"ok": False, "error": "invalid_max_orders"})
+            return
+
+        if max_orders < 0 or max_orders > MAX_ORDERS_PER_BLOCK_LIMIT:
+            json_response(self, 400, {"ok": False, "error": "invalid_max_orders"})
+            return
+
+        settings = {"maxOrdersPerBlock": max_orders}
+        save_settings(self.storage_dir, settings)
+        json_response(self, 200, {"ok": True, "settings": settings})
 
     def handle_admin_orders_list(self, parsed_url):
         query = parse_qs(parsed_url.query)

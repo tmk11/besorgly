@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin | Besorgly</title>
-    <link rel="stylesheet" href="admin.css?v=admin-tabs-20260608">
+    <link rel="stylesheet" href="admin.css?v=tour-20260611">
 </head>
 <body>
     <main class="admin-shell">
@@ -39,7 +39,7 @@
                 </div>
             </header>
 
-            <section class="filters" aria-label="Bestellungen filtern">
+            <section class="filters" aria-label="Bestellungen filtern und Kapazität einstellen">
                 <label>
                     <span>Suchen</span>
                     <input id="searchInput" type="search" placeholder="Name, Telefon, Adresse, Bestellnummer">
@@ -57,15 +57,58 @@
                         <option value="cancelled">Vom Kunden storniert</option>
                     </select>
                 </label>
+                <form class="capacity-control" id="capacityForm">
+                    <label>
+                        <span>Max. Bestellungen pro Zeitblock</span>
+                        <div class="capacity-row">
+                            <input id="maxOrdersInput" type="number" min="0" max="500" inputmode="numeric" placeholder="z. B. 6">
+                            <button class="button button-primary" type="submit">Speichern</button>
+                        </div>
+                    </label>
+                    <p class="capacity-hint" id="capacityHint" aria-live="polite">0 = keine Begrenzung</p>
+                </form>
             </section>
 
             <nav class="view-tabs" aria-label="Admin Ansicht wählen">
-                <button class="view-tab active" type="button" data-view="time">Zeitblöcke</button>
-                <button class="view-tab" type="button" data-view="market">Supermärkte</button>
-                <button class="view-tab" type="button" data-view="history">Historie</button>
+                <button class="view-tab active" type="button" data-view="time">
+                    <span class="tab-icon" aria-hidden="true">🕐</span>
+                    <span class="tab-text"><strong>Zeitblöcke</strong><small>Aktive Lieferblöcke</small></span>
+                </button>
+                <button class="view-tab" type="button" data-view="tour">
+                    <span class="tab-icon" aria-hidden="true">🗺️</span>
+                    <span class="tab-text"><strong>Tour planen</strong><small>Einkauf &amp; Route</small></span>
+                </button>
+                <button class="view-tab" type="button" data-view="market">
+                    <span class="tab-icon" aria-hidden="true">🛒</span>
+                    <span class="tab-text"><strong>Supermärkte</strong><small>Nach Markt gruppiert</small></span>
+                </button>
+                <button class="view-tab" type="button" data-view="history">
+                    <span class="tab-icon" aria-hidden="true">📁</span>
+                    <span class="tab-text"><strong>Historie</strong><small>Erledigt &amp; abgelaufen</small></span>
+                </button>
             </nav>
 
-            <div class="admin-grid">
+            <section class="tour-panel" id="tourPanel" hidden aria-labelledby="tourTitle">
+                <div class="panel-title">
+                    <h2 id="tourTitle">Einkaufs- und Liefertour planen</h2>
+                </div>
+                <p class="muted">
+                    Wählen Sie einen Zeitblock. Die Tour fasst alle Einkäufe pro Supermarkt zusammen
+                    und schlägt eine Reihenfolge für Märkte und Lieferadressen vor (Start: Basis).
+                </p>
+                <div class="tour-controls">
+                    <label>
+                        <span>Zeitblock</span>
+                        <select id="tourBlockSelect"></select>
+                    </label>
+                    <button class="button button-primary" id="planTourButton" type="button">Tour berechnen</button>
+                </div>
+                <div class="tour-result" id="tourResult" aria-live="polite">
+                    <p class="muted">Noch keine Tour berechnet.</p>
+                </div>
+            </section>
+
+            <div class="admin-grid" id="adminGrid">
                 <section class="orders-panel" aria-labelledby="ordersTitle">
                     <div class="panel-title">
                         <h2 id="ordersTitle">Alle Bestellungen</h2>
@@ -84,6 +127,6 @@
         </section>
     </main>
 
-    <script src="admin.js?v=admin-tabs-20260608"></script>
+    <script src="admin.js?v=tour-20260611"></script>
 </body>
 </html>

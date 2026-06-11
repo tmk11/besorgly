@@ -181,20 +181,45 @@ textarea {
 
 .filters {
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) 240px;
+    grid-template-columns: minmax(220px, 1fr) 200px minmax(280px, 1fr);
+    align-items: start;
     margin-bottom: 16px;
     padding: 16px;
 }
 
+.capacity-control {
+    display: grid;
+    gap: 4px;
+}
+
+.capacity-row {
+    display: flex;
+    gap: 8px;
+}
+
+.capacity-row input {
+    max-width: 120px;
+}
+
+.capacity-hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
 .view-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 16px;
 }
 
 .view-tab {
-    min-height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 66px;
     padding: 12px 14px;
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -202,7 +227,30 @@ textarea {
     color: var(--text);
     cursor: pointer;
     font-weight: 900;
+    text-align: left;
     box-shadow: 0 8px 18px rgba(26, 44, 31, 0.06);
+}
+
+.tab-icon {
+    display: grid;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 12px;
+    background: #f0f4f0;
+    font-size: 1.25rem;
+}
+
+.tab-text {
+    display: grid;
+    gap: 2px;
+}
+
+.tab-text small {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 700;
 }
 
 .view-tab.active {
@@ -210,6 +258,171 @@ textarea {
     background: #e9f5ee;
     color: var(--primary-dark);
     box-shadow: 0 0 0 3px rgba(15, 111, 67, 0.12);
+}
+
+.view-tab.active .tab-icon {
+    background: var(--primary);
+}
+
+.tour-panel {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    box-shadow: var(--shadow);
+}
+
+.tour-controls {
+    display: flex;
+    align-items: end;
+    gap: 12px;
+    margin: 14px 0 18px;
+}
+
+.tour-controls label {
+    flex: 1;
+    max-width: 420px;
+}
+
+.tour-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.tour-summary-box {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #f7faf7;
+}
+
+.tour-summary-box span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.tour-summary-box strong {
+    font-size: 1.25rem;
+}
+
+.tour-maps-link {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 14px;
+    text-decoration: none;
+}
+
+.tour-warning {
+    padding: 10px 12px;
+    border: 1px solid #f4d7a8;
+    border-radius: 12px;
+    background: #fff7e8;
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.tour-stops {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 22px;
+    padding: 0;
+    list-style: none;
+}
+
+.tour-stop {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.tour-stop.origin {
+    background: #e9f5ee;
+    border-color: var(--primary);
+}
+
+.tour-stop.market {
+    background: #f1f6ff;
+}
+
+.tour-stop-number {
+    display: grid;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 900;
+}
+
+.tour-stop-body {
+    flex: 1;
+}
+
+.tour-stop-body p {
+    margin: 2px 0 0;
+    font-size: 0.92rem;
+}
+
+.tour-stop-leg {
+    flex-shrink: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.tour-market-list {
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #fbfdfb;
+}
+
+.tour-market-list h4 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 0 10px;
+    font-size: 1.02rem;
+}
+
+.tour-market-list h4 span {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.tour-market-list ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tour-item {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.tour-item-meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 700;
 }
 
 .admin-grid {
@@ -486,9 +699,22 @@ textarea {
 @media (max-width: 980px) {
     .admin-grid,
     .filters,
-    .view-tabs,
     .detail-meta {
         grid-template-columns: 1fr;
+    }
+
+    .view-tabs,
+    .tour-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tour-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tour-controls label {
+        max-width: none;
     }
 
     .orders-list {

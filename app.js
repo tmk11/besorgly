@@ -5,6 +5,8 @@ const LOYALTY_TARGET_ORDERS = 8;
 const ORDER_ENDPOINT = "/api/orders";
 const LOYALTY_ENDPOINT = "/api/loyalty";
 const COVERAGE_ENDPOINT = "/api/coverage";
+const CAPACITY_ENDPOINT = "/api/capacity";
+const CAPACITY_POLL_MS = 60000;
 const SERVICE_AREA_LABEL = "ausgewählte Testbereiche von Rheydt-Odenkirchen";
 const ORDER_STATUS_STORAGE_KEY = "shoppingOrderStatuses";
 const ORDER_STATUS_POLL_MS = 15000;
@@ -48,6 +50,7 @@ const state = {
     trackedOrders: [],
     currentOrderText: "",
     entryMode: "photo",
+    capacity: null,
 };
 
 const itemForm = document.querySelector("#itemForm");
@@ -189,11 +192,72 @@ function getDeliveryBlockOptions(now = new Date()) {
     return options;
 }
 
+function blockKeyFromValue(value) {
+    const match = String(value || "").match(/(\d{2})\.(\d{2})\.(\d{4}).*?(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
+    if (!match) {
+        return null;
+    }
+
+    const [, day, month, year, startHour, startMinute, endHour, endMinute] = match;
+    return `${day}.${month}.${year} ${startHour.padStart(2, "0")}:${startMinute}-${endHour.padStart(2, "0")}:${endMinute}`;
+}
+
+function isBlockFull(value) {
+    const capacity = state.capacity;
+    if (!capacity || !capacity.maxOrdersPerBlock) {
+        return false;
+    }
+
+    const key = blockKeyFromValue(value);
+    if (!key) {
+        return false;
+    }
+
+    return (capacity.usage?.[key] || 0) >= capacity.maxOrdersPerBlock;
+}
+
 function renderDeliveryTimeOptions() {
+    const previousValue = deliveryTimeInput.value;
     const options = getDeliveryBlockOptions();
-    deliveryTimeInput.innerHTML = options.map((option) => `
-        <option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>
-    `).join("");
+    const allFull = options.length > 0 && options.every((option) => isBlockFull(option.value));
+
+    deliveryTimeInput.innerHTML = options.map((option) => {
+        const full = isBlockFull(option.value);
+        const label = full ? `${option.label} – leider ausgebucht` : option.label;
+        return `<option value="${escapeHtml(option.value)}" ${full ? "disabled" : ""}>${escapeHtml(label)}</option>`;
+    }).join("");
+
+    if (allFull) {
+        deliveryTimeInput.insertAdjacentHTML(
+            "afterbegin",
+            '<option value="" selected disabled>Alle Zeitfenster sind leider ausgebucht</option>',
+        );
+        return;
+    }
+
+    const previousOption = [...deliveryTimeInput.options]
+        .find((option) => option.value === previousValue && !option.disabled);
+    if (previousOption) {
+        deliveryTimeInput.value = previousValue;
+    } else {
+        const firstFree = [...deliveryTimeInput.options].find((option) => !option.disabled);
+        if (firstFree) {
+            deliveryTimeInput.value = firstFree.value;
+        }
+    }
+}
+
+async function refreshCapacity() {
+    try {
+        const response = await fetch(CAPACITY_ENDPOINT);
+        const result = await response.json();
+        if (response.ok && result.ok) {
+            state.capacity = result;
+            renderDeliveryTimeOptions();
+        }
+    } catch {
+        // Ohne Kapazitätsdaten bleiben alle Zeitfenster wählbar; der Server prüft beim Absenden.
+    }
 }
 
 function createEmptyProduct() {
@@ -1334,6 +1398,10 @@ function uploadErrorMessage(error) {
         return "Ihre Adresse wurde nicht gefunden. Bitte prüfen Sie Straße, Hausnummer, PLZ und Ort.";
     }
 
+    if (code === "block_full") {
+        return "Dieses Lieferzeitfenster ist leider schon voll. Bitte wählen Sie ein anderes Zeitfenster.";
+    }
+
     return "Senden nicht möglich. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.";
 }
 
@@ -1411,9 +1479,14 @@ async function finishOrder() {
                 orderStatusSection.focus({ preventScroll: true });
             }
         }
+        refreshCapacity();
         showToast(buildLoyaltySuccessMessage(result), 6200);
     } catch (error) {
         showToast(uploadErrorMessage(error), 6200);
+        if (error?.message === "block_full") {
+            closeOrderModal();
+            refreshCapacity();
+        }
     } finally {
         confirmOrder.disabled = false;
         confirmOrder.textContent = "Bestellung bestätigen";
@@ -1551,4 +1624,6 @@ setContrastMode(localStorage.getItem("darkMode") === "true" || localStorage.getI
 loadTrackedOrders();
 renderOrderStatuses();
 refreshTrackedOrders();
+refreshCapacity();
 window.setInterval(refreshTrackedOrders, ORDER_STATUS_POLL_MS);
+window.setInterval(refreshCapacity, CAPACITY_POLL_MS);

@@ -14,6 +14,7 @@ const state = {
     orders: [],
     selectedOrderId: null,
     activeView: "time",
+    settings: { maxOrdersPerBlock: 0 },
 };
 
 const loginCard = document.querySelector("#loginCard");
@@ -30,6 +31,14 @@ const ordersList = document.querySelector("#ordersList");
 const ordersCount = document.querySelector("#ordersCount");
 const ordersTitle = document.querySelector("#ordersTitle");
 const detailPanel = document.querySelector("#detailPanel");
+const adminGrid = document.querySelector("#adminGrid");
+const capacityForm = document.querySelector("#capacityForm");
+const maxOrdersInput = document.querySelector("#maxOrdersInput");
+const capacityHint = document.querySelector("#capacityHint");
+const tourPanel = document.querySelector("#tourPanel");
+const tourBlockSelect = document.querySelector("#tourBlockSelect");
+const planTourButton = document.querySelector("#planTourButton");
+const tourResult = document.querySelector("#tourResult");
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"]/g, (character) => {
@@ -151,7 +160,7 @@ async function checkSession() {
         const result = await apiFetch("/session");
         if (result.authenticated) {
             showDashboard();
-            await loadOrders();
+            await Promise.all([loadOrders(), loadSettings()]);
             return;
         }
     } catch {
@@ -159,6 +168,48 @@ async function checkSession() {
     }
 
     showLogin();
+}
+
+function updateCapacityHint() {
+    const max = state.settings.maxOrdersPerBlock;
+    capacityHint.textContent = max > 0
+        ? `Aktuell: maximal ${max} Bestellung${max === 1 ? "" : "en"} je Zeitblock. Volle Blöcke werden für Kundinnen und Kunden gesperrt.`
+        : "Aktuell: keine Begrenzung (0).";
+}
+
+async function loadSettings() {
+    try {
+        const result = await apiFetch("/settings");
+        state.settings = result.settings || { maxOrdersPerBlock: 0 };
+        maxOrdersInput.value = state.settings.maxOrdersPerBlock;
+        updateCapacityHint();
+        renderOrders();
+    } catch {
+        capacityHint.textContent = "Einstellungen konnten nicht geladen werden.";
+    }
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+
+    const maxOrders = Number.parseInt(maxOrdersInput.value, 10);
+    if (Number.isNaN(maxOrders) || maxOrders < 0 || maxOrders > 500) {
+        capacityHint.textContent = "Bitte eine Zahl zwischen 0 und 500 eingeben.";
+        return;
+    }
+
+    try {
+        const result = await apiFetch("/settings", {
+            method: "POST",
+            body: JSON.stringify({ maxOrdersPerBlock: maxOrders }),
+        });
+        state.settings = result.settings;
+        updateCapacityHint();
+        capacityHint.textContent += " ✓ Gespeichert.";
+        renderOrders();
+    } catch {
+        capacityHint.textContent = "Speichern fehlgeschlagen. Bitte erneut versuchen.";
+    }
 }
 
 async function login(event) {
@@ -172,7 +223,7 @@ async function login(event) {
         });
         adminPassword.value = "";
         showDashboard();
-        await loadOrders();
+        await Promise.all([loadOrders(), loadSettings()]);
     } catch {
         showLogin("Passwort ist nicht korrekt.");
     }
@@ -265,6 +316,16 @@ function viewTitle() {
     return "Aktuelle Zeitblöcke";
 }
 
+function capacitySubtitle(orders) {
+    const max = state.settings.maxOrdersPerBlock;
+    if (!max) {
+        return "Aktiver Lieferblock";
+    }
+
+    const full = orders.length >= max;
+    return `${orders.length} von ${max} Plätzen belegt${full ? " – VOLL" : ""}`;
+}
+
 function renderOrderCard(order) {
     const supermarketText = supermarketsForOrder(order).join(", ");
     const entryModeText = order.entryMode === "products" ? "Produkte eingegeben" : "Zettel/Fotos";
@@ -313,13 +374,23 @@ function renderOrders() {
     const currentOrders = state.orders.filter((order) => !isHistoryOrder(order));
     const displayedOrders = state.activeView === "history" ? historyOrders : currentOrders;
 
-    ordersTitle.textContent = viewTitle();
-    ordersCount.textContent = displayedOrders.length;
     viewTabs.forEach((tab) => {
         const active = tab.dataset.view === state.activeView;
         tab.classList.toggle("active", active);
         tab.setAttribute("aria-pressed", String(active));
     });
+
+    const tourActive = state.activeView === "tour";
+    tourPanel.hidden = !tourActive;
+    adminGrid.hidden = tourActive;
+
+    if (tourActive) {
+        renderTourBlockOptions(currentOrders);
+        return;
+    }
+
+    ordersTitle.textContent = viewTitle();
+    ordersCount.textContent = displayedOrders.length;
 
     if (displayedOrders.length === 0) {
         ordersList.innerHTML = '<p class="muted empty-orders-message">Keine Bestellungen in dieser Ansicht.</p>';
@@ -342,8 +413,183 @@ function renderOrders() {
         ([firstTitle], [secondTitle]) => deliveryBlockSortValue(firstTitle) - deliveryBlockSortValue(secondTitle),
         (title, orders) => state.activeView === "history"
             ? `${orders.length} erledigte oder abgelaufene Bestellung${orders.length === 1 ? "" : "en"}`
-            : "Aktiver Lieferblock",
+            : capacitySubtitle(orders),
     );
+}
+
+function renderTourBlockOptions(currentOrders) {
+    const previousValue = tourBlockSelect.value;
+    const blocks = [...new Set(currentOrders
+        .map((order) => order.deliveryTime)
+        .filter((deliveryTime) => deliveryTime))]
+        .sort((first, second) => deliveryBlockSortValue(first) - deliveryBlockSortValue(second));
+
+    if (blocks.length === 0) {
+        tourBlockSelect.innerHTML = '<option value="">Keine aktiven Zeitblöcke</option>';
+        planTourButton.disabled = true;
+        return;
+    }
+
+    planTourButton.disabled = false;
+    tourBlockSelect.innerHTML = blocks.map((block) => `
+        <option value="${escapeHtml(block)}">${escapeHtml(block)}</option>
+    `).join("");
+
+    if (blocks.includes(previousValue)) {
+        tourBlockSelect.value = previousValue;
+    }
+}
+
+function preferenceLabel(item) {
+    return item.preference === "cheapest" ? "günstigste Variante" : "genau diesen Artikel";
+}
+
+function renderTourItemLine(item) {
+    const quantity = item.quantity || "Menge offen";
+    const name = item.name || "Produkt per Foto";
+    const details = item.details ? ` – ${item.details}` : "";
+    const photoNote = item.photoCount ? ` · ${item.photoCount} Foto${item.photoCount === 1 ? "" : "s"}` : "";
+
+    return `
+        <li class="tour-item">
+            <span class="tour-item-main"><strong>${escapeHtml(quantity)}</strong> ${escapeHtml(name)}${escapeHtml(details)}</span>
+            <span class="tour-item-meta">${escapeHtml(item.customerName || "?")} (#${escapeHtml(item.shortId)}) · ${preferenceLabel(item)}${photoNote}</span>
+        </li>
+    `;
+}
+
+function renderTourStop(stop, index, type) {
+    const legText = typeof stop.legKm === "number" ? `+ ${stop.legKm.toFixed(1).replace(".", ",")} km` : "";
+
+    if (type === "market") {
+        return `
+            <li class="tour-stop market">
+                <span class="tour-stop-number">${index}</span>
+                <div class="tour-stop-body">
+                    <strong>🛒 ${escapeHtml(stop.market)}</strong>
+                    <p>${escapeHtml(stop.address || "Adresse unbekannt")}</p>
+                    <p class="muted">${stop.itemCount} Artikel einkaufen</p>
+                </div>
+                <span class="tour-stop-leg">${legText}</span>
+            </li>
+        `;
+    }
+
+    return `
+        <li class="tour-stop customer">
+            <span class="tour-stop-number">${index}</span>
+            <div class="tour-stop-body">
+                <strong>📦 ${escapeHtml(stop.customerName || "Ohne Name")} (#${escapeHtml(stop.shortId)})</strong>
+                <p>${escapeHtml(stop.address)}</p>
+                <p class="muted">${escapeHtml(stop.phone || "")}${stop.deliveryNote && stop.deliveryNote !== "keine Hinweise" ? ` · ${escapeHtml(stop.deliveryNote)}` : ""}</p>
+            </div>
+            <span class="tour-stop-leg">${legText}</span>
+        </li>
+    `;
+}
+
+function renderTour(tour) {
+    if (!tour.orderCount) {
+        tourResult.innerHTML = '<p class="muted empty-orders-message">Keine aktiven Bestellungen in diesem Zeitblock.</p>';
+        return;
+    }
+
+    let stopNumber = 0;
+    const marketStopsHtml = tour.marketStops.map((stop) => renderTourStop(stop, ++stopNumber, "market")).join("");
+    const customerStopsHtml = tour.deliveryStops.map((stop) => renderTourStop(stop, ++stopNumber, "customer")).join("");
+
+    const marketListsHtml = tour.marketStops.concat(tour.unroutableMarkets).map((stop) => `
+        <section class="tour-market-list">
+            <h4>🛒 ${escapeHtml(stop.market)} <span>${stop.itemCount} Artikel</span></h4>
+            <ul>${stop.items.map(renderTourItemLine).join("")}</ul>
+        </section>
+    `).join("");
+
+    const openChoiceHtml = tour.openChoiceItems.length
+        ? `
+            <section class="tour-market-list">
+                <h4>🆓 Supermarkt frei wählbar <span>${tour.openChoiceItems.length} Artikel</span></h4>
+                <ul>${tour.openChoiceItems.map(renderTourItemLine).join("")}</ul>
+            </section>
+        `
+        : "";
+
+    const photoOrdersHtml = tour.photoOrders.length
+        ? `
+            <section class="tour-market-list">
+                <h4>📷 Einkaufszettel als Foto <span>${tour.photoOrders.length} Bestellung${tour.photoOrders.length === 1 ? "" : "en"}</span></h4>
+                <ul>
+                    ${tour.photoOrders.map((order) => `
+                        <li class="tour-item">
+                            <span class="tour-item-main"><strong>${escapeHtml(order.customerName || "Ohne Name")}</strong> (#${escapeHtml(order.shortId)})</span>
+                            <span class="tour-item-meta">${order.photoCount} Foto${order.photoCount === 1 ? "" : "s"} – bitte in der Bestellung öffnen</span>
+                        </li>
+                    `).join("")}
+                </ul>
+            </section>
+        `
+        : "";
+
+    const warnings = [];
+    if (tour.unroutableMarkets.length) {
+        warnings.push(`Für ${tour.unroutableMarkets.map((stop) => stop.market).join(", ")} wurde keine Adresse gefunden – bitte manuell einplanen.`);
+    }
+    if (tour.unroutableCustomers.length) {
+        warnings.push(`${tour.unroutableCustomers.length} Lieferadresse${tour.unroutableCustomers.length === 1 ? "" : "n"} ohne Koordinaten: ${tour.unroutableCustomers.map((stop) => `${stop.customerName || "?"} (${stop.address})`).join("; ")}`);
+    }
+
+    tourResult.innerHTML = `
+        <div class="tour-summary">
+            <div class="tour-summary-box"><span>Bestellungen</span><strong>${tour.orderCount}</strong></div>
+            <div class="tour-summary-box"><span>Supermärkte</span><strong>${tour.marketStops.length + tour.unroutableMarkets.length}</strong></div>
+            <div class="tour-summary-box"><span>Lieferstopps</span><strong>${tour.deliveryStops.length + tour.unroutableCustomers.length}</strong></div>
+            <div class="tour-summary-box"><span>Strecke (Luftlinie)</span><strong>ca. ${String(tour.totalKm).replace(".", ",")} km</strong></div>
+        </div>
+
+        ${tour.mapsUrl ? `<a class="button button-primary tour-maps-link" href="${escapeHtml(tour.mapsUrl)}" target="_blank" rel="noopener">🧭 Route in Google Maps öffnen</a>` : ""}
+
+        ${warnings.map((warning) => `<p class="tour-warning">⚠️ ${escapeHtml(warning)}</p>`).join("")}
+
+        <h3>Vorgeschlagene Reihenfolge</h3>
+        <ol class="tour-stops">
+            <li class="tour-stop origin">
+                <span class="tour-stop-number">★</span>
+                <div class="tour-stop-body">
+                    <strong>Start: Basis</strong>
+                    <p>${escapeHtml(tour.originAddress)}</p>
+                </div>
+                <span class="tour-stop-leg"></span>
+            </li>
+            ${marketStopsHtml}
+            ${customerStopsHtml}
+        </ol>
+
+        <h3>Einkaufslisten pro Supermarkt</h3>
+        ${marketListsHtml || '<p class="muted">Keine Produkte mit festem Supermarkt.</p>'}
+        ${openChoiceHtml}
+        ${photoOrdersHtml}
+    `;
+}
+
+async function planTour() {
+    const block = tourBlockSelect.value;
+    if (!block) {
+        return;
+    }
+
+    planTourButton.disabled = true;
+    planTourButton.textContent = "Wird berechnet ...";
+    tourResult.innerHTML = '<p class="muted">Tour wird berechnet – Supermarkt-Adressen werden ermittelt ...</p>';
+
+    try {
+        const result = await apiFetch(`/tour?${new URLSearchParams({ block }).toString()}`);
+        renderTour(result.tour);
+    } catch {
+        tourResult.innerHTML = '<p class="muted empty-orders-message">Tour konnte nicht berechnet werden. Bitte erneut versuchen.</p>';
+    } finally {
+        planTourButton.disabled = false;
+        planTourButton.textContent = "Tour berechnen";
+    }
 }
 
 async function selectOrder(event) {
@@ -496,6 +742,8 @@ function scheduleLoadOrders() {
 loginForm.addEventListener("submit", login);
 logoutButton.addEventListener("click", logout);
 refreshOrders.addEventListener("click", loadOrders);
+capacityForm.addEventListener("submit", saveSettings);
+planTourButton.addEventListener("click", planTour);
 ordersList.addEventListener("click", selectOrder);
 searchInput.addEventListener("input", scheduleLoadOrders);
 statusFilter.addEventListener("change", loadOrders);
