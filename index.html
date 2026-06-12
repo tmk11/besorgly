@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Besorgly: Einfacher Einkaufsservice für ältere Menschen: Netto, dm, Lidl und Aldi.">
     <title>Besorgly | Einkauf einfach bestellen</title>
-    <link rel="stylesheet" href="styles.css?v=upgrade-20260610">
+    <link rel="stylesheet" href="styles.css?v=modify-20260612">
 </head>
 <body>
     <header class="top-header" id="top">
@@ -150,6 +150,14 @@
                 <p>Felder mit * müssen ausgefüllt werden.</p>
             </div>
 
+            <div class="edit-order-banner" id="editOrderBanner" hidden>
+                <div>
+                    <strong>✏️ Sie ändern eine bestehende Bestellung</strong>
+                    <p id="editOrderBannerText"></p>
+                </div>
+                <button class="button button-secondary" id="cancelEditOrder" type="button">Änderung abbrechen</button>
+            </div>
+
             <div class="order-grid">
                 <div class="forms-column">
                     <form class="panel" id="customerForm">
@@ -264,6 +272,14 @@
                             </button>
                         </section>
 
+                        <section class="entry-mode-panel existing-photos-panel" id="existingPhotosPanel" hidden>
+                            <h4>Bisherige Fotos Ihrer Bestellung</h4>
+                            <p class="photo-help">
+                                Diese Fotos gehören bereits zu Ihrer Bestellung. Sie können einzelne Fotos entfernen oder neue hinzufügen.
+                            </p>
+                            <div class="photo-grid" id="existingPhotosList" aria-live="polite"></div>
+                        </section>
+
                         <p class="inline-warning" id="heavyWarning" hidden>
                             Dieser Artikel ist wahrscheinlich zu schwer. Wasserkästen und Getränkekisten können wir zurzeit nicht einkaufen.
                         </p>
@@ -337,7 +353,7 @@
                 <div class="section-title">
                     <span>Immer sichtbar</span>
                     <h2 id="order-status-title">Bestellung verfolgen</h2>
-                    <p>Der aktuelle Stand bleibt hier sichtbar. In den ersten 5 Minuten können Sie stornieren.</p>
+                    <p>Der aktuelle Stand bleibt hier sichtbar. Ändern können Sie Ihre Bestellung bis zum Bestellschluss des Zeitfensters, stornieren bis 30 Minuten vor Beginn der Lieferung.</p>
                 </div>
                 <div class="order-status-list" id="orderStatusList" aria-live="polite"></div>
             </div>
@@ -383,6 +399,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="app.js?v=capacity-20260611"></script>
+    <script src="app.js?v=modify-20260612"></script>
 </body>
 </html>
