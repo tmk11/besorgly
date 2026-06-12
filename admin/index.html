@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin | Besorgly</title>
-    <link rel="stylesheet" href="admin.css?v=tour-20260611">
+    <link rel="stylesheet" href="admin.css?v=stats-20260612">
 </head>
 <body>
     <main class="admin-shell">
@@ -86,6 +86,10 @@
                     <span class="tab-icon" aria-hidden="true">📁</span>
                     <span class="tab-text"><strong>Historie</strong><small>Erledigt &amp; abgelaufen</small></span>
                 </button>
+                <button class="view-tab" type="button" data-view="stats">
+                    <span class="tab-icon" aria-hidden="true">📊</span>
+                    <span class="tab-text"><strong>Statistik</strong><small>Zahlen &amp; Trends</small></span>
+                </button>
             </nav>
 
             <section class="tour-panel" id="tourPanel" hidden aria-labelledby="tourTitle">
@@ -108,6 +112,18 @@
                 </div>
             </section>
 
+            <section class="tour-panel stats-panel" id="statsPanel" hidden aria-labelledby="statsTitle">
+                <div class="panel-title">
+                    <h2 id="statsTitle">Statistik</h2>
+                </div>
+                <p class="muted">
+                    Überblick über Bestellungen, Stornierungen, Stammkunden und Servicegebühren – für die Auswertung der Testphase.
+                </p>
+                <div class="stats-result" id="statsResult" aria-live="polite">
+                    <p class="muted">Statistik wird geladen ...</p>
+                </div>
+            </section>
+
             <div class="admin-grid" id="adminGrid">
                 <section class="orders-panel" aria-labelledby="ordersTitle">
                     <div class="panel-title">
@@ -127,6 +143,6 @@
         </section>
     </main>
 
-    <script src="admin.js?v=tour-20260611"></script>
+    <script src="admin.js?v=stats-20260612"></script>
 </body>
 </html>
