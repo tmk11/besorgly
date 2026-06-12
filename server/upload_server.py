@@ -23,6 +23,9 @@ from urllib.request import Request, urlopen
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_PHOTOS = 30
 MAX_ESTIMATED_ORDER_VALUE = 80
+SERVICE_FEE = 8.5
+MULTI_MARKET_FEE = 2.0
+ITEM_FALLBACK_OPTIONS = {"call", "similar", "skip"}
 LOYALTY_TARGET_ORDERS = 8
 ADMIN_SESSION_SECONDS = 12 * 60 * 60
 # Stornieren ist bis 30 Minuten vor Beginn des Lieferzeitfensters möglich.
@@ -467,6 +470,138 @@ def customer_history_for_identity(storage_dir, customer):
     }
 
 
+def compute_fees(items, base=None):
+    markets = {
+        item.get("supermarket")
+        for item in items
+        if item.get("supermarket") and item.get("supermarket") != "Egal"
+    }
+    count = len(markets)
+    surcharge = count * MULTI_MARKET_FEE if count >= 2 else 0
+    fees = dict(base or {})
+    fees.update({
+        "serviceFee": SERVICE_FEE,
+        "multiMarketFee": MULTI_MARKET_FEE,
+        "marketCount": count,
+        "surcharge": surcharge,
+        "totalServiceFee": SERVICE_FEE + surcharge,
+    })
+    return fees
+
+
+def sanitize_items(raw_items, existing_items):
+    """Normalize an item list from a client; photo metadata can only
+    come from the existing record, never from the request."""
+    existing_by_id = {
+        item.get("id"): item
+        for item in existing_items
+        if isinstance(item, dict) and item.get("id")
+    }
+    items = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+
+        item_id = str(raw.get("id") or "") or secrets.token_hex(6)
+        existing = existing_by_id.get(item_id, {})
+        items.append({
+            "id": item_id,
+            "name": str(raw.get("name", ""))[:200],
+            "quantity": str(raw.get("quantity", ""))[:100],
+            "supermarket": str(raw.get("supermarket", "Egal") or "Egal")[:50],
+            "preference": "cheapest" if raw.get("preference") == "cheapest" else "specific",
+            "fallback": raw.get("fallback") if raw.get("fallback") in ITEM_FALLBACK_OPTIONS else "call",
+            "details": str(raw.get("details", ""))[:500],
+            "photos": existing.get("photos", []),
+        })
+    return items
+
+
+def order_stats(storage_dir):
+    status_counts = {status: 0 for status in ADMIN_STATUSES}
+    total_orders = 0
+    cancelled_by_customer = 0
+    modified_by_customer = 0
+    free_shipping_used = 0
+    service_fee_revenue = 0.0
+    customer_order_counts = {}
+    weekly = {}
+
+    for path in order_json_paths(storage_dir):
+        record = read_order_record(path)
+        if not record:
+            continue
+
+        total_orders += 1
+        status = get_admin_status(record)
+        status_counts[status] = status_counts.get(status, 0) + 1
+        payload = record.get("payload", {})
+
+        if record.get("admin", {}).get("cancelledBy") == "customer":
+            cancelled_by_customer += 1
+        if record.get("modifiedByCustomer"):
+            modified_by_customer += 1
+
+        order_free_shipping = bool(payload.get("loyalty", {}).get("freeShippingUsed"))
+        if order_free_shipping:
+            free_shipping_used += 1
+
+        if status == "delivered" and not order_free_shipping:
+            fee = parse_estimated_value(payload.get("fees", {}).get("totalServiceFee"))
+            if fee:
+                service_fee_revenue += fee
+
+        lookup_key = customer_key(payload.get("customer", {}))
+        if lookup_key and status not in LOYALTY_INACTIVE_STATUSES:
+            customer_order_counts[lookup_key] = customer_order_counts.get(lookup_key, 0) + 1
+
+        created_at = parse_iso_datetime(record.get("createdAt"))
+        if created_at:
+            iso = created_at.astimezone(LOCAL_TIMEZONE).isocalendar()
+            week_key = (iso[0], iso[1])
+            entry = weekly.setdefault(week_key, {"orders": 0, "delivered": 0, "inactive": 0})
+            entry["orders"] += 1
+            if status == "delivered":
+                entry["delivered"] += 1
+            if status in LOYALTY_INACTIVE_STATUSES:
+                entry["inactive"] += 1
+
+    weeks = []
+    for (year, week), entry in sorted(weekly.items(), reverse=True)[:8]:
+        monday = datetime.fromisocalendar(year, week, 1)
+        sunday = monday + timedelta(days=6)
+        weeks.append({
+            "label": f"KW {week}",
+            "range": f"{monday.strftime('%d.%m.')}–{sunday.strftime('%d.%m.%Y')}",
+            **entry,
+        })
+
+    unique_customers = len(customer_order_counts)
+    returning_customers = sum(1 for count in customer_order_counts.values() if count >= 2)
+    cancelled_total = status_counts.get("cancelled", 0) + status_counts.get("rejected", 0)
+
+    def percent(part, whole):
+        return round(part / whole * 100, 1) if whole else 0.0
+
+    return {
+        "totalOrders": total_orders,
+        "statusCounts": status_counts,
+        "deliveredCount": status_counts.get("delivered", 0),
+        "deliveredRate": percent(status_counts.get("delivered", 0), total_orders),
+        "cancelledCount": status_counts.get("cancelled", 0),
+        "rejectedCount": status_counts.get("rejected", 0),
+        "cancelledRate": percent(cancelled_total, total_orders),
+        "cancelledByCustomerCount": cancelled_by_customer,
+        "modifiedByCustomerCount": modified_by_customer,
+        "freeShippingUsedCount": free_shipping_used,
+        "serviceFeeRevenue": round(service_fee_revenue, 2),
+        "uniqueCustomers": unique_customers,
+        "returningCustomers": returning_customers,
+        "returningRate": percent(returning_customers, unique_customers),
+        "weeks": weeks,
+    }
+
+
 def settings_path(storage_dir):
     return storage_dir / "settings.json"
 
@@ -603,6 +738,7 @@ def build_tour(storage_dir, block_value):
                 "name": item.get("name", ""),
                 "details": item.get("details", ""),
                 "preference": item.get("preference", "specific"),
+                "fallback": item.get("fallback") if item.get("fallback") in ITEM_FALLBACK_OPTIONS else "call",
                 "photoCount": len(item.get("photos", [])),
             }
             market = item.get("supermarket") or "Egal"
@@ -1289,6 +1425,10 @@ class UploadHandler(BaseHTTPRequestHandler):
             json_response(self, 200, {"ok": True, "settings": load_settings(self.storage_dir)})
             return
 
+        if parsed_url.path == "/admin/stats":
+            json_response(self, 200, {"ok": True, "stats": order_stats(self.storage_dir)})
+            return
+
         if parsed_url.path == "/admin/tour":
             query = parse_qs(parsed_url.query)
             block_value = query.get("block", [""])[0]
@@ -1333,6 +1473,11 @@ class UploadHandler(BaseHTTPRequestHandler):
         status_match = re.fullmatch(r"/admin/orders/([^/]+)/status", parsed_url.path)
         if status_match:
             self.handle_admin_status_update(unquote(status_match.group(1)))
+            return
+
+        update_match = re.fullmatch(r"/admin/orders/([^/]+)/update", parsed_url.path)
+        if update_match:
+            self.handle_admin_order_update(unquote(update_match.group(1)))
             return
 
         json_response(self, 404, {"ok": False, "error": "not_found"})
@@ -1476,6 +1621,51 @@ class UploadHandler(BaseHTTPRequestHandler):
             "status": status,
             "note": note,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        write_order_record(self.storage_dir, record)
+        json_response(self, 200, {"ok": True, "order": order_detail(self.storage_dir, record)})
+
+    def handle_admin_order_update(self, order_id):
+        path = order_path(self.storage_dir, order_id)
+        if not path or not path.exists():
+            json_response(self, 404, {"ok": False, "error": "order_not_found"})
+            return
+
+        try:
+            data = read_json_body(self)
+        except json.JSONDecodeError:
+            json_response(self, 400, {"ok": False, "error": "invalid_json"})
+            return
+
+        record = read_order_record(path)
+        if not record:
+            json_response(self, 500, {"ok": False, "error": "order_cannot_be_read"})
+            return
+
+        payload = record.get("payload", {})
+        customer = payload.get("customer", {})
+
+        if "items" in data:
+            if not isinstance(data["items"], list):
+                json_response(self, 400, {"ok": False, "error": "invalid_items"})
+                return
+            payload["items"] = sanitize_items(data["items"], payload.get("items", []))
+            payload["fees"] = compute_fees(payload["items"], payload.get("fees"))
+            if payload["items"]:
+                payload["entryMode"] = "products"
+
+        for field, max_length in (("deliveryTime", 120), ("contactWay", 40), ("deliveryNote", 500)):
+            if field in data:
+                customer[field] = str(data[field])[:max_length]
+        payload["customer"] = customer
+
+        now = datetime.now(timezone.utc).isoformat()
+        record["payload"] = payload
+        record["modifiedAt"] = now
+        record["modifiedByAdmin"] = True
+        record["admin"] = {
+            **record.get("admin", {}),
+            "updatedAt": now,
         }
         write_order_record(self.storage_dir, record)
         json_response(self, 200, {"ok": True, "order": order_detail(self.storage_dir, record)})
