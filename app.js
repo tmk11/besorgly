@@ -28,6 +28,11 @@ const DELIVERY_BLOCKS = [
         end: "18:00",
     },
 ];
+const ITEM_FALLBACK_LABELS = {
+    call: "Wenn ausverkauft: bitte anrufen",
+    similar: "Wenn ausverkauft: ähnliches Produkt kaufen",
+    skip: "Wenn ausverkauft: weglassen",
+};
 const heavyItemKeywords = [
     "wasserkasten",
     "wasser kasten",
@@ -277,9 +282,14 @@ function createEmptyProduct() {
         quantity: "",
         supermarket: "Egal",
         preference: "specific",
+        fallback: "call",
         details: "",
         photos: [],
     };
+}
+
+function fallbackLabel(fallback) {
+    return ITEM_FALLBACK_LABELS[fallback] || ITEM_FALLBACK_LABELS.call;
 }
 
 function isPhotoEntryMode() {
@@ -326,10 +336,11 @@ function getShoppingListText() {
         const quantity = item.quantity.trim() || "Menge nicht angegeben";
         const supermarket = item.supermarket && item.supermarket !== "Egal" ? ` | ${item.supermarket}` : " | Supermarkt egal";
         const preference = item.preference === "cheapest" ? " | günstigste passende Variante" : " | bestimmter Artikel / Foto beachten";
+        const fallback = ` | ${fallbackLabel(item.fallback)}`;
         const details = item.details.trim() ? ` | Hinweis: ${item.details.trim()}` : "";
         const photos = item.photos.length ? ` | ${item.photos.length} Foto${item.photos.length === 1 ? "" : "s"}` : "";
 
-        return `${index + 1}. ${quantity} ${item.name.trim() || "Produkt per Foto"}${supermarket}${preference}${details}${photos}`;
+        return `${index + 1}. ${quantity} ${item.name.trim() || "Produkt per Foto"}${supermarket}${preference}${fallback}${details}${photos}`;
     }).join("\n");
 }
 
@@ -729,6 +740,7 @@ async function startOrderModification(orderId) {
         quantity: item.quantity || "",
         supermarket: item.supermarket || "Egal",
         preference: item.preference === "cheapest" ? "cheapest" : "specific",
+        fallback: ITEM_FALLBACK_LABELS[item.fallback] ? item.fallback : "call",
         details: item.details || "",
         photos: [],
     }));
@@ -935,6 +947,14 @@ function renderProductRows() {
                             <option value="cheapest" ${item.preference === "cheapest" ? "selected" : ""}>Günstigste passende Variante</option>
                         </select>
                     </label>
+                    <label class="field">
+                        <span>Wenn ausverkauft</span>
+                        <select data-id="${item.id}" data-field="fallback">
+                            <option value="call" ${item.fallback === "call" || !item.fallback ? "selected" : ""}>Bitte anrufen</option>
+                            <option value="similar" ${item.fallback === "similar" ? "selected" : ""}>Ähnliches Produkt kaufen</option>
+                            <option value="skip" ${item.fallback === "skip" ? "selected" : ""}>Produkt weglassen</option>
+                        </select>
+                    </label>
                 </div>
 
                 <label class="field product-note-field">
@@ -980,6 +1000,7 @@ function renderItems() {
                             <span class="badge">${escapeHtml(item.quantity || "Menge offen")}</span>
                             <span class="badge">${escapeHtml(item.supermarket || "Egal")}</span>
                             <span class="badge${preferenceClass}">${preferenceText}</span>
+                            <span class="badge">${escapeHtml(fallbackLabel(item.fallback))}</span>
                             ${photoBadge}
                         </div>
                         ${details}
@@ -1066,6 +1087,7 @@ function renderCustomerOrderSummary() {
                         <span>${escapeHtml(item.quantity || "Menge offen")}</span>
                         <span>${escapeHtml(item.supermarket || "Egal")}</span>
                         <span>${getPreferenceLabel(item.preference)}</span>
+                        <span>${escapeHtml(fallbackLabel(item.fallback))}</span>
                         ${photoText}
                     </div>
                     ${details}
@@ -1400,6 +1422,7 @@ function serializeItems() {
         quantity: item.quantity.trim(),
         supermarket: item.supermarket || "Egal",
         preference: item.preference || "specific",
+        fallback: item.fallback || "call",
         details: item.details.trim(),
         photos: item.photos.map((photo) => ({
             id: photo.id,
@@ -1439,9 +1462,10 @@ function buildOrderText() {
             const preferenceText = item.preference === "cheapest" ? "günstigste passende Variante" : "genau diesen Artikel / Foto beachten";
             const quantity = item.quantity || "Menge offen";
             const name = item.name || "Produkt per Foto";
+            const fallback = ` | ${fallbackLabel(item.fallback)}`;
             const details = item.details ? ` | Hinweis: ${item.details}` : "";
             const photos = item.photos.length ? ` | Fotos: ${item.photos.map((photo) => photo.name).join(", ")}` : " | keine Produktfotos";
-            return `${index + 1}. ${quantity} ${name} | ${item.supermarket} | ${preferenceText}${details}${photos}`;
+            return `${index + 1}. ${quantity} ${name} | ${item.supermarket} | ${preferenceText}${fallback}${details}${photos}`;
         }).join("\n")
         : "Keine Produkte als Zeile eingetragen. Bitte zusätzliche Fotos prüfen.";
     const keptPhotos = keptExistingPhotos();

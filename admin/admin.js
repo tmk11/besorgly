@@ -10,6 +10,19 @@ const statusLabels = {
     cancelled: "Storniert",
 };
 
+const itemFallbackLabels = {
+    call: "Bitte anrufen",
+    similar: "Ähnliches Produkt kaufen",
+    skip: "Produkt weglassen",
+};
+
+const supermarketOptions = ["Egal", "Netto", "dm", "Lidl", "Aldi"];
+const contactWayOptions = ["Telefon", "WhatsApp", "SMS", "E-Mail"];
+const adminDeliveryBlocks = [
+    { start: "12:00", end: "14:00" },
+    { start: "16:00", end: "18:00" },
+];
+
 const state = {
     orders: [],
     selectedOrderId: null,
@@ -39,6 +52,17 @@ const tourPanel = document.querySelector("#tourPanel");
 const tourBlockSelect = document.querySelector("#tourBlockSelect");
 const planTourButton = document.querySelector("#planTourButton");
 const tourResult = document.querySelector("#tourResult");
+const statsPanel = document.querySelector("#statsPanel");
+const statsResult = document.querySelector("#statsResult");
+
+const euroFormatter = new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+});
+
+function fallbackLabel(fallback) {
+    return itemFallbackLabels[fallback] || itemFallbackLabels.call;
+}
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"]/g, (character) => {
@@ -382,11 +406,18 @@ function renderOrders() {
     });
 
     const tourActive = state.activeView === "tour";
+    const statsActive = state.activeView === "stats";
     tourPanel.hidden = !tourActive;
-    adminGrid.hidden = tourActive;
+    statsPanel.hidden = !statsActive;
+    adminGrid.hidden = tourActive || statsActive;
 
     if (tourActive) {
         renderTourBlockOptions(currentOrders);
+        return;
+    }
+
+    if (statsActive) {
+        loadStats();
         return;
     }
 
@@ -454,7 +485,7 @@ function renderTourItemLine(item) {
     return `
         <li class="tour-item">
             <span class="tour-item-main"><strong>${escapeHtml(quantity)}</strong> ${escapeHtml(name)}${escapeHtml(details)}</span>
-            <span class="tour-item-meta">${escapeHtml(item.customerName || "?")} (#${escapeHtml(item.shortId)}) · ${preferenceLabel(item)}${photoNote}</span>
+            <span class="tour-item-meta">${escapeHtml(item.customerName || "?")} (#${escapeHtml(item.shortId)}) · ${preferenceLabel(item)} · Ausverkauft: ${escapeHtml(fallbackLabel(item.fallback))}${photoNote}</span>
         </li>
     `;
 }
@@ -593,6 +624,150 @@ async function planTour() {
     }
 }
 
+function selectOptionsHtml(values, current) {
+    const allValues = current && !values.includes(current) ? [current, ...values] : values;
+    return allValues.map((value) => `
+        <option value="${escapeHtml(value)}" ${value === current ? "selected" : ""}>${escapeHtml(value)}</option>
+    `).join("");
+}
+
+function deliveryBlockValueFor(date, dayLabel, block) {
+    const formattedDate = new Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+    }).format(date);
+    return `${dayLabel}, ${formattedDate}, ${block.start}–${block.end}`;
+}
+
+function deliveryTimeOptionsHtml(current) {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const values = [
+        ...adminDeliveryBlocks.map((block) => deliveryBlockValueFor(today, "Heute", block)),
+        ...adminDeliveryBlocks.map((block) => deliveryBlockValueFor(tomorrow, "Morgen", block)),
+    ];
+    return selectOptionsHtml(values, current || "");
+}
+
+function editItemRowHtml(item = {}, photos = []) {
+    const itemId = item.id || `admin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `
+        <div class="edit-item-row" data-item-id="${escapeHtml(itemId)}">
+            <div class="edit-item-fields">
+                <label><span>Menge</span><input data-field="quantity" type="text" value="${escapeHtml(item.quantity || "")}" placeholder="z. B. 2x"></label>
+                <label><span>Produkt</span><input data-field="name" type="text" value="${escapeHtml(item.name || "")}" placeholder="z. B. Milch"></label>
+                <label><span>Supermarkt</span><select data-field="supermarket">${selectOptionsHtml(supermarketOptions, item.supermarket || "Egal")}</select></label>
+                <label><span>Wunsch</span><select data-field="preference">
+                    <option value="specific" ${item.preference !== "cheapest" ? "selected" : ""}>Genau dieser Artikel</option>
+                    <option value="cheapest" ${item.preference === "cheapest" ? "selected" : ""}>Günstigste Variante</option>
+                </select></label>
+                <label><span>Wenn ausverkauft</span><select data-field="fallback">
+                    <option value="call" ${!item.fallback || item.fallback === "call" ? "selected" : ""}>Bitte anrufen</option>
+                    <option value="similar" ${item.fallback === "similar" ? "selected" : ""}>Ähnliches Produkt kaufen</option>
+                    <option value="skip" ${item.fallback === "skip" ? "selected" : ""}>Produkt weglassen</option>
+                </select></label>
+                <label class="edit-item-details"><span>Hinweis</span><input data-field="details" type="text" value="${escapeHtml(item.details || "")}" placeholder="z. B. Marke, Bio, laktosefrei"></label>
+            </div>
+            <button class="remove-edit-item" type="button" aria-label="Produkt entfernen">× Entfernen</button>
+            ${renderItemPhotos(item, photos)}
+        </div>
+    `;
+}
+
+async function saveOrderEdit(event, orderId) {
+    event.preventDefault();
+    const message = document.querySelector("#editOrderMessage");
+    const rows = [...document.querySelectorAll("#editItemRows .edit-item-row")];
+    const items = rows.map((row) => ({
+        id: row.dataset.itemId,
+        quantity: row.querySelector('[data-field="quantity"]').value.trim(),
+        name: row.querySelector('[data-field="name"]').value.trim(),
+        supermarket: row.querySelector('[data-field="supermarket"]').value,
+        preference: row.querySelector('[data-field="preference"]').value,
+        fallback: row.querySelector('[data-field="fallback"]').value,
+        details: row.querySelector('[data-field="details"]').value.trim(),
+    })).filter((item) => item.name || item.quantity || item.details);
+
+    const body = {
+        items,
+        deliveryTime: document.querySelector("#editDeliveryTime").value,
+        contactWay: document.querySelector("#editContactWay").value,
+        deliveryNote: document.querySelector("#editDeliveryNote").value.trim() || "keine Hinweise",
+    };
+
+    message.textContent = "Wird gespeichert ...";
+    try {
+        const result = await apiFetch(`/orders/${encodeURIComponent(orderId)}/update`, {
+            method: "POST",
+            body: JSON.stringify(body),
+        });
+        renderOrderDetail(result.order);
+        document.querySelector("#editOrderMessage").textContent = "✓ Änderungen gespeichert.";
+        await loadOrders();
+    } catch {
+        message.textContent = "Speichern fehlgeschlagen. Bitte erneut versuchen.";
+    }
+}
+
+async function loadStats() {
+    statsResult.innerHTML = '<p class="muted">Statistik wird geladen ...</p>';
+    try {
+        const result = await apiFetch("/stats");
+        renderStats(result.stats || {});
+    } catch {
+        statsResult.innerHTML = '<p class="muted">Statistik konnte nicht geladen werden. Bitte erneut versuchen.</p>';
+    }
+}
+
+function renderStats(stats) {
+    const statusRows = Object.entries(statusLabels).map(([value, label]) => `
+        <tr><td>${escapeHtml(label)}</td><td>${stats.statusCounts?.[value] ?? 0}</td></tr>
+    `).join("");
+
+    const weekRows = (stats.weeks || []).map((week) => `
+        <tr>
+            <td><strong>${escapeHtml(week.label)}</strong><br><span class="muted">${escapeHtml(week.range)}</span></td>
+            <td>${week.orders}</td>
+            <td>${week.delivered}</td>
+            <td>${week.inactive}</td>
+        </tr>
+    `).join("");
+
+    statsResult.innerHTML = `
+        <div class="tour-summary stats-summary">
+            <div class="tour-summary-box"><span>Bestellungen gesamt</span><strong>${stats.totalOrders ?? 0}</strong></div>
+            <div class="tour-summary-box"><span>Geliefert</span><strong>${stats.deliveredCount ?? 0} (${stats.deliveredRate ?? 0} %)</strong></div>
+            <div class="tour-summary-box"><span>Storniert / Abgelehnt</span><strong>${(stats.cancelledCount ?? 0) + (stats.rejectedCount ?? 0)} (${stats.cancelledRate ?? 0} %)</strong></div>
+            <div class="tour-summary-box"><span>Umsatz Servicegebühren</span><strong>${euroFormatter.format(stats.serviceFeeRevenue || 0)}</strong></div>
+            <div class="tour-summary-box"><span>Kundinnen & Kunden</span><strong>${stats.uniqueCustomers ?? 0}</strong></div>
+            <div class="tour-summary-box"><span>Stammkunden (ab 2 Best.)</span><strong>${stats.returningCustomers ?? 0} (${stats.returningRate ?? 0} %)</strong></div>
+            <div class="tour-summary-box"><span>Gratis-Lieferungen genutzt</span><strong>${stats.freeShippingUsedCount ?? 0}</strong></div>
+            <div class="tour-summary-box"><span>Vom Kunden geändert</span><strong>${stats.modifiedByCustomerCount ?? 0}</strong></div>
+        </div>
+
+        <p class="muted">Umsatz zählt Servicegebühren gelieferter Bestellungen ohne Gratis-Lieferungen. Vom Kunden stornierte Bestellungen: ${stats.cancelledByCustomerCount ?? 0}.</p>
+
+        <div class="stats-tables">
+            <section>
+                <h3>Nach Status</h3>
+                <table class="stats-table">
+                    <tbody>${statusRows}</tbody>
+                </table>
+            </section>
+            <section>
+                <h3>Pro Woche (letzte 8)</h3>
+                <table class="stats-table">
+                    <thead><tr><th>Woche</th><th>Bestellungen</th><th>Geliefert</th><th>Storniert/Abgel.</th></tr></thead>
+                    <tbody>${weekRows || '<tr><td colspan="4" class="muted">Noch keine Bestellungen.</td></tr>'}</tbody>
+                </table>
+            </section>
+        </div>
+    `;
+}
+
 async function selectOrder(event) {
     const card = event.target.closest(".order-card");
     if (!card) {
@@ -630,6 +805,7 @@ function renderOrderDetail(order) {
                 <h2>${escapeHtml(order.orderId)}</h2>
                 <p class="muted">${formatDate(order.createdAt)}</p>
                 ${order.modifiedByCustomer ? `<p class="muted">✏️ Vom Kunden geändert: ${formatDate(order.modifiedAt)}</p>` : ""}
+                ${order.modifiedByAdmin ? `<p class="muted">🛠️ Vom Admin bearbeitet: ${formatDate(order.modifiedAt)}</p>` : ""}
             </div>
             ${statusBadge(admin.status || "new")}
         </div>
@@ -683,19 +859,27 @@ function renderOrderDetail(order) {
             ` : '<p class="muted">Keine Einkaufsliste als Text eingetragen.</p>'}
         </section>
 
-        <section class="detail-section">
-            <h3>Produkte</h3>
-            <div class="items-list">
-                ${items.length ? items.map((item) => `
-                    <div class="item-line">
-                        <strong>${escapeHtml(item.quantity || "Menge offen")} ${escapeHtml(item.name || "Produkt per Foto")}</strong><br>
-                        <span>${escapeHtml(item.supermarket || "Egal")} · ${item.preference === "cheapest" ? "günstigste passende Variante" : "bestimmter Artikel / Foto beachten"}</span>
-                        ${item.details ? `<p class="muted">${escapeHtml(item.details)}</p>` : ""}
-                        ${renderItemPhotos(item, photos)}
-                    </div>
-                `).join("") : '<p class="muted">Keine Produkte eingetragen. Bitte Einkaufsliste und Fotos prüfen.</p>'}
+        <form class="detail-section" id="editOrderForm">
+            <h3>Produkte & Lieferdaten bearbeiten</h3>
+            <p class="muted">Zum Beispiel nach einem Anruf der Kundin oder des Kunden: Produkte ändern, hinzufügen oder entfernen.</p>
+            <div class="edit-items" id="editItemRows">
+                ${items.length
+                    ? items.map((item) => editItemRowHtml(item, photos)).join("")
+                    : '<p class="muted" id="noItemsHint">Keine Produkte eingetragen (z. B. Foto-Bestellung). Sie können Produkte hinzufügen.</p>'}
             </div>
-        </section>
+            <button class="button button-secondary" id="addEditItem" type="button">+ Produkt hinzufügen</button>
+
+            <div class="edit-order-fields">
+                <label><span>Lieferzeitfenster</span><select id="editDeliveryTime">${deliveryTimeOptionsHtml(customer.deliveryTime)}</select></label>
+                <label><span>Kontaktweg</span><select id="editContactWay">${selectOptionsHtml(contactWayOptions, customer.contactWay || "Telefon")}</select></label>
+                <label><span>Lieferhinweis</span><input id="editDeliveryNote" type="text" value="${escapeHtml(customer.deliveryNote === "keine Hinweise" ? "" : customer.deliveryNote || "")}" placeholder="z. B. 2. Etage, Klingel links"></label>
+            </div>
+
+            <div class="detail-actions">
+                <button class="button button-primary" type="submit">Änderungen speichern</button>
+            </div>
+            <p class="muted" id="editOrderMessage" aria-live="polite"></p>
+        </form>
 
         <section class="detail-section">
             <h3>Fotos</h3>
@@ -715,6 +899,17 @@ function renderOrderDetail(order) {
     `;
 
     document.querySelector("#statusForm").addEventListener("submit", (event) => saveStatus(event, order.orderId));
+    document.querySelector("#editOrderForm").addEventListener("submit", (event) => saveOrderEdit(event, order.orderId));
+    document.querySelector("#addEditItem").addEventListener("click", () => {
+        document.querySelector("#noItemsHint")?.remove();
+        document.querySelector("#editItemRows").insertAdjacentHTML("beforeend", editItemRowHtml());
+    });
+    document.querySelector("#editItemRows").addEventListener("click", (event) => {
+        const removeButton = event.target.closest(".remove-edit-item");
+        if (removeButton) {
+            removeButton.closest(".edit-item-row").remove();
+        }
+    });
 }
 
 async function saveStatus(event, orderId) {
