@@ -9,7 +9,8 @@ import secrets
 import shutil
 import time
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from email import policy
 from email.parser import BytesParser
 from http.cookies import SimpleCookie
@@ -24,9 +25,15 @@ MAX_PHOTOS = 30
 MAX_ESTIMATED_ORDER_VALUE = 80
 LOYALTY_TARGET_ORDERS = 8
 ADMIN_SESSION_SECONDS = 12 * 60 * 60
-ORDER_CANCEL_WINDOW_SECONDS = 5 * 60
+# Stornieren ist bis 30 Minuten vor Beginn des Lieferzeitfensters möglich.
+CANCEL_BEFORE_BLOCK_START_SECONDS = 30 * 60
+# Ändern ist möglich, solange der Block noch Bestellungen annimmt
+# (Bestellschluss = 2 Stunden vor Blockbeginn, siehe DELIVERY_BLOCKS im Frontend).
+MODIFY_BEFORE_BLOCK_START_SECONDS = 2 * 60 * 60
+LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
 ADMIN_STATUSES = {"new", "deposit_pending", "accepted", "shopping", "delivered", "rejected", "cancelled"}
 CUSTOMER_CANCELLABLE_STATUSES = {"new", "deposit_pending", "accepted"}
+CUSTOMER_MODIFIABLE_STATUSES = {"new", "deposit_pending", "accepted"}
 LOYALTY_INACTIVE_STATUSES = {"rejected", "cancelled"}
 SERVICE_ORIGIN_ADDRESS = "Karlstraße 15, 41199 Mönchengladbach"
 SERVICE_ORIGIN_LAT = 51.1357675
@@ -314,21 +321,53 @@ def parse_iso_datetime(value):
         return None
 
 
+def block_start_from_delivery_time(value):
+    match = BLOCK_KEY_RE.search(str(value or ""))
+    if not match:
+        return None
+
+    day, month, year, start_hour, start_minute, _, _ = match.groups()
+    try:
+        return datetime(int(year), int(month), int(day), int(start_hour), int(start_minute), tzinfo=LOCAL_TIMEZONE)
+    except ValueError:
+        return None
+
+
 def public_order_status(record):
     created_at = parse_iso_datetime(record.get("createdAt")) or datetime.now(timezone.utc)
     updated_at = parse_iso_datetime(record.get("admin", {}).get("updatedAt")) or created_at
-    cancel_until = created_at.timestamp() + ORDER_CANCEL_WINDOW_SECONDS
-    remaining_seconds = max(0, int(cancel_until - time.time()))
     status = get_admin_status(record)
+    delivery_time = record.get("payload", {}).get("customer", {}).get("deliveryTime", "")
+    block_start = block_start_from_delivery_time(delivery_time)
+
+    cancel_deadline = None
+    modify_deadline = None
+    cancel_remaining = None
+    modify_remaining = None
+    if block_start is not None:
+        cancel_deadline = block_start - timedelta(seconds=CANCEL_BEFORE_BLOCK_START_SECONDS)
+        modify_deadline = block_start - timedelta(seconds=MODIFY_BEFORE_BLOCK_START_SECONDS)
+        now_ts = time.time()
+        cancel_remaining = max(0, int(cancel_deadline.timestamp() - now_ts))
+        modify_remaining = max(0, int(modify_deadline.timestamp() - now_ts))
+
+    can_cancel = status in CUSTOMER_CANCELLABLE_STATUSES and (cancel_remaining is None or cancel_remaining > 0)
+    can_modify = status in CUSTOMER_MODIFIABLE_STATUSES and (modify_remaining is None or modify_remaining > 0)
 
     return {
         "orderId": record.get("orderId"),
         "status": status,
         "createdAt": record.get("createdAt"),
         "updatedAt": updated_at.isoformat(),
-        "cancelWindowSeconds": ORDER_CANCEL_WINDOW_SECONDS,
-        "cancelRemainingSeconds": remaining_seconds,
-        "canCancel": remaining_seconds > 0 and status in CUSTOMER_CANCELLABLE_STATUSES,
+        "deliveryTime": delivery_time,
+        "cancelDeadline": cancel_deadline.isoformat() if cancel_deadline else None,
+        "cancelRemainingSeconds": cancel_remaining,
+        "canCancel": can_cancel,
+        "modifyDeadline": modify_deadline.isoformat() if modify_deadline else None,
+        "modifyRemainingSeconds": modify_remaining,
+        "canModify": can_modify,
+        "modifiedByCustomer": bool(record.get("modifiedByCustomer")),
+        "modifiedAt": record.get("modifiedAt"),
         "cancelledByCustomer": record.get("admin", {}).get("cancelledBy") == "customer",
         "cancelReason": record.get("admin", {}).get("cancelReason", ""),
     }
@@ -689,6 +728,8 @@ def order_summary(record):
     return {
         "orderId": record.get("orderId"),
         "createdAt": record.get("createdAt"),
+        "modifiedAt": record.get("modifiedAt"),
+        "modifiedByCustomer": bool(record.get("modifiedByCustomer")),
         "status": admin.get("status", "new"),
         "adminNote": admin.get("note", ""),
         "customerName": customer.get("name", ""),
@@ -848,6 +889,16 @@ class UploadHandler(BaseHTTPRequestHandler):
             self.handle_public_order_status(unquote(status_match.group(1)))
             return
 
+        photo_match = re.fullmatch(r"/orders/([^/]+)/photos/(.+)", parsed_url.path)
+        if photo_match:
+            self.serve_order_photo(unquote(photo_match.group(1)), unquote(photo_match.group(2)))
+            return
+
+        detail_match = re.fullmatch(r"/orders/([^/]+)", parsed_url.path)
+        if detail_match:
+            self.handle_public_order_detail(unquote(detail_match.group(1)))
+            return
+
         json_response(self, 404, {"error": "not_found"})
 
     def do_OPTIONS(self):
@@ -867,6 +918,11 @@ class UploadHandler(BaseHTTPRequestHandler):
         cancel_match = re.fullmatch(r"/orders/([^/]+)/cancel", parsed_url.path)
         if cancel_match:
             self.handle_public_order_cancel(unquote(cancel_match.group(1)))
+            return
+
+        modify_match = re.fullmatch(r"/orders/([^/]+)/modify", parsed_url.path)
+        if modify_match:
+            self.handle_public_order_modify(unquote(modify_match.group(1)))
             return
 
         if parsed_url.path != "/orders":
@@ -1044,11 +1100,178 @@ class UploadHandler(BaseHTTPRequestHandler):
             "status": "cancelled",
             "note": record.get("admin", {}).get("note", ""),
             "cancelledBy": "customer",
-            "cancelReason": "Vom Kunden innerhalb von 5 Minuten storniert.",
+            "cancelReason": "Vom Kunden vor Beginn des Lieferzeitfensters storniert.",
             "updatedAt": now,
         }
         write_order_record(self.storage_dir, record)
         json_response(self, 200, {"ok": True, "order": public_order_status(record)})
+
+    def handle_public_order_detail(self, order_id):
+        path = order_path(self.storage_dir, order_id)
+        if not path or not path.exists():
+            json_response(self, 404, {"ok": False, "error": "order_not_found"})
+            return
+
+        record = read_order_record(path)
+        if not record:
+            json_response(self, 500, {"ok": False, "error": "order_cannot_be_read"})
+            return
+
+        payload = record.get("payload", {})
+        customer = payload.get("customer", {})
+        json_response(self, 200, {"ok": True, "order": {
+            "orderId": record.get("orderId"),
+            "createdAt": record.get("createdAt"),
+            "status": public_order_status(record),
+            "entryMode": payload.get("entryMode", "photo"),
+            "items": payload.get("items", []),
+            "customer": {
+                "name": customer.get("name", ""),
+                "phone": customer.get("phone", ""),
+                "address": customer.get("address", ""),
+                "deliveryTime": customer.get("deliveryTime", ""),
+                "contactWay": customer.get("contactWay", "Telefon"),
+                "deliveryNote": customer.get("deliveryNote", ""),
+            },
+            "photos": [
+                {
+                    "filename": photo.get("filename", ""),
+                    "url": f"/api/orders/{quote(order_id)}/photos/{quote(photo.get('filename', ''))}",
+                }
+                for photo in record.get("photos", [])
+            ],
+        }})
+
+    def handle_public_order_modify(self, order_id):
+        path = order_path(self.storage_dir, order_id)
+        if not path or not path.exists():
+            json_response(self, 404, {"ok": False, "error": "order_not_found"})
+            return
+
+        record = read_order_record(path)
+        if not record:
+            json_response(self, 500, {"ok": False, "error": "order_cannot_be_read"})
+            return
+
+        current_status = public_order_status(record)
+        if not current_status["canModify"]:
+            json_response(self, 409, {"ok": False, "error": "modify_not_allowed", "order": current_status})
+            return
+
+        content_length = int(self.headers.get("Content-Length", "0") or "0")
+        if content_length <= 0:
+            json_response(self, 400, {"ok": False, "error": "empty_request"})
+            return
+        if content_length > MAX_UPLOAD_BYTES:
+            json_response(self, 413, {"ok": False, "error": "too_large", "maxBytes": MAX_UPLOAD_BYTES})
+            return
+
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            json_response(self, 400, {"ok": False, "error": "multipart_required"})
+            return
+
+        try:
+            fields, files = parse_multipart_form(self.rfile, content_type, content_length)
+        except Exception:
+            json_response(self, 400, {"ok": False, "error": "invalid_multipart"})
+            return
+
+        order_text = fields.get("orderText", [""])[0].strip()
+        if not order_text:
+            json_response(self, 400, {"ok": False, "error": "order_text_required"})
+            return
+
+        try:
+            new_payload = json.loads(fields.get("payload", ["{}"])[0].strip() or "{}")
+        except json.JSONDecodeError:
+            json_response(self, 400, {"ok": False, "error": "invalid_payload"})
+            return
+
+        try:
+            keep_filenames = json.loads(fields.get("keepPhotos", ["[]"])[0] or "[]")
+        except json.JSONDecodeError:
+            keep_filenames = []
+        keep_set = {str(name) for name in keep_filenames} if isinstance(keep_filenames, list) else set()
+
+        payload = record.get("payload", {})
+        existing_customer = payload.get("customer", {})
+        new_customer = new_payload.get("customer") if isinstance(new_payload.get("customer"), dict) else {}
+        # Name, Telefon, Adresse und Zeitfenster bleiben fest;
+        # nur Kontaktweg und Lieferhinweis dürfen geändert werden.
+        payload["customer"] = {
+            **existing_customer,
+            "contactWay": new_customer.get("contactWay", existing_customer.get("contactWay", "")),
+            "deliveryNote": new_customer.get("deliveryNote", existing_customer.get("deliveryNote", "")),
+        }
+        payload["entryMode"] = new_payload.get("entryMode", payload.get("entryMode", "photo"))
+        payload["shoppingListText"] = new_payload.get("shoppingListText", "")
+        payload["cheapestPreference"] = bool(new_payload.get("cheapestPreference"))
+        payload["items"] = new_payload.get("items") if isinstance(new_payload.get("items"), list) else []
+        payload["photos"] = new_payload.get("photos") if isinstance(new_payload.get("photos"), list) else []
+        if isinstance(new_payload.get("fees"), dict):
+            payload["fees"] = new_payload["fees"]
+
+        order_dir = self.storage_dir / order_id
+        photo_dir = order_dir / "photos"
+        photo_dir.mkdir(parents=True, exist_ok=True)
+
+        kept_photos = []
+        max_index = 0
+        for photo in record.get("photos", []):
+            filename = photo.get("filename", "")
+            index_match = re.match(r"(\d+)-", filename)
+            if index_match:
+                max_index = max(max_index, int(index_match.group(1)))
+            if filename in keep_set:
+                kept_photos.append(photo)
+            else:
+                try:
+                    (photo_dir / filename).unlink()
+                except OSError:
+                    pass
+
+        saved_photos = list(kept_photos)
+        for offset, photo in enumerate(files.get("photos", []), start=1):
+            if len(saved_photos) >= MAX_PHOTOS:
+                break
+            if not photo.filename:
+                continue
+
+            photo_content_type = photo.type or "application/octet-stream"
+            if not photo_content_type.startswith("image/"):
+                continue
+
+            filename = f"{max_index + offset:02d}-{safe_filename(photo.filename)}"
+            destination = photo_dir / filename
+            with destination.open("wb") as output:
+                shutil.copyfileobj(photo.file, output)
+
+            saved_photos.append({
+                "filename": filename,
+                "contentType": photo_content_type,
+                "size": destination.stat().st_size,
+            })
+
+        now = datetime.now(timezone.utc).isoformat()
+        record["payload"] = payload
+        record["photos"] = saved_photos
+        record["modifiedAt"] = now
+        record["modifiedByCustomer"] = True
+        record["admin"] = {
+            **record.get("admin", {}),
+            "updatedAt": now,
+        }
+
+        (order_dir / "order.txt").write_text(order_text + "\n", encoding="utf-8")
+        write_order_record(self.storage_dir, record)
+
+        json_response(self, 200, {
+            "ok": True,
+            "orderId": order_id,
+            "photoCount": len(saved_photos),
+            "orderStatus": public_order_status(record),
+        })
 
     def handle_admin_get(self, parsed_url):
         if parsed_url.path == "/admin/session":
@@ -1195,6 +1418,9 @@ class UploadHandler(BaseHTTPRequestHandler):
         json_response(self, 200, {"ok": True, "order": order_detail(self.storage_dir, record)})
 
     def handle_admin_photo(self, order_id, filename):
+        self.serve_order_photo(order_id, filename)
+
+    def serve_order_photo(self, order_id, filename):
         path = order_path(self.storage_dir, order_id)
         if not path or not path.exists():
             json_response(self, 404, {"ok": False, "error": "order_not_found"})

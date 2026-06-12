@@ -570,6 +570,17 @@ h1 {
     font-weight: 900;
 }
 
+.modify-order-button {
+    min-height: 48px;
+    padding: 10px 16px;
+    border: 2px solid var(--primary-dark);
+    border-radius: 12px;
+    background: var(--primary-soft);
+    color: var(--primary-dark);
+    cursor: pointer;
+    font-weight: 900;
+}
+
 .remove-status-button {
     min-height: 48px;
     padding: 10px 16px;
@@ -1307,6 +1318,43 @@ body.dark-mode .photo-button {
     color: var(--warning);
     cursor: pointer;
     font-weight: 900;
+}
+
+.keep-photo {
+    min-height: 46px;
+    border: 2px solid var(--primary-dark);
+    border-radius: 12px;
+    background: var(--primary-soft);
+    color: var(--primary-dark);
+    cursor: pointer;
+    font-weight: 900;
+}
+
+.photo-card.is-removed img {
+    opacity: 0.4;
+}
+
+.photo-card.is-removed .photo-card-name {
+    text-decoration: line-through;
+}
+
+.edit-order-banner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+    padding: clamp(16px, 3vw, 22px);
+    border: 2px solid var(--primary-dark);
+    border-radius: var(--radius);
+    background: var(--primary-soft);
+}
+
+.edit-order-banner p {
+    margin-bottom: 0;
+    color: var(--text);
+    font-weight: 700;
 }
 
 .summary-panel {

@@ -342,6 +342,7 @@ function renderOrderCard(order) {
             <p><strong>Zeit:</strong> ${escapeHtml(order.deliveryTime || "Ohne Zeitfenster")}</p>
             <p><strong>Markt:</strong> ${escapeHtml(supermarketText)}</p>
             <p>${formatDate(order.createdAt)} · ${escapeHtml(entryModeText)} · ${escapeHtml(orderContentSummary(order))}</p>
+            ${order.modifiedByCustomer ? `<p class="order-preview">✏️ Vom Kunden geändert: ${formatDate(order.modifiedAt)}</p>` : ""}
             ${order.shoppingListPreview ? `<p class="order-preview">${escapeHtml(order.shoppingListPreview)}</p>` : ""}
         </button>
     `;
@@ -628,6 +629,7 @@ function renderOrderDetail(order) {
             <div>
                 <h2>${escapeHtml(order.orderId)}</h2>
                 <p class="muted">${formatDate(order.createdAt)}</p>
+                ${order.modifiedByCustomer ? `<p class="muted">✏️ Vom Kunden geändert: ${formatDate(order.modifiedAt)}</p>` : ""}
             </div>
             ${statusBadge(admin.status || "new")}
         </div>

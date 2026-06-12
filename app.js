@@ -51,6 +51,7 @@ const state = {
     currentOrderText: "",
     entryMode: "photo",
     capacity: null,
+    editingOrder: null,
 };
 
 const itemForm = document.querySelector("#itemForm");
@@ -89,6 +90,11 @@ const statusPanelToggle = document.querySelector("#statusPanelToggle");
 const statusPanelSummary = document.querySelector("#statusPanelSummary");
 const statusPanelCount = document.querySelector("#statusPanelCount");
 const orderStatusList = document.querySelector("#orderStatusList");
+const editOrderBanner = document.querySelector("#editOrderBanner");
+const editOrderBannerText = document.querySelector("#editOrderBannerText");
+const cancelEditOrderButton = document.querySelector("#cancelEditOrder");
+const existingPhotosPanel = document.querySelector("#existingPhotosPanel");
+const existingPhotosList = document.querySelector("#existingPhotosList");
 const orderModal = document.querySelector("#orderModal");
 const customerOrderSummary = document.querySelector("#customerOrderSummary");
 const closeModal = document.querySelector("#closeModal");
@@ -217,6 +223,10 @@ function isBlockFull(value) {
 }
 
 function renderDeliveryTimeOptions() {
+    if (state.editingOrder) {
+        return;
+    }
+
     const previousValue = deliveryTimeInput.value;
     const options = getDeliveryBlockOptions();
     const allFull = options.length > 0 && options.every((option) => isBlockFull(option.value));
@@ -358,8 +368,19 @@ function getMarketStats() {
     return { count, surcharge, total };
 }
 
+function keptExistingPhotos() {
+    return state.editingOrder
+        ? state.editingOrder.existingPhotos.filter((photo) => photo.keep)
+        : [];
+}
+
 function hasOrderContent() {
-    return isPhotoEntryMode() ? state.photos.length > 0 : getFilledItems().length > 0;
+    const hasNewContent = isPhotoEntryMode() ? state.photos.length > 0 : getFilledItems().length > 0;
+    return hasNewContent || keptExistingPhotos().length > 0;
+}
+
+function submitButtonLabel() {
+    return state.editingOrder ? "Änderungen speichern" : "Bestellung absenden";
 }
 
 function showToast(message, duration = 2800) {
@@ -441,11 +462,21 @@ function formatOrderDate(value) {
     }).format(date);
 }
 
-function formatCancelTime(seconds) {
+function formatRemainingDuration(seconds) {
     const safeSeconds = Math.max(0, Number(seconds) || 0);
-    const minutes = Math.floor(safeSeconds / 60);
-    const restSeconds = safeSeconds % 60;
-    return `${minutes}:${String(restSeconds).padStart(2, "0")}`;
+    const days = Math.floor(safeSeconds / 86400);
+    const hours = Math.floor((safeSeconds % 86400) / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+    if (days > 0) {
+        return `${days} Tag${days === 1 ? "" : "e"} ${hours} Std.`;
+    }
+
+    if (hours > 0) {
+        return `${hours} Std. ${minutes} Min.`;
+    }
+
+    return `${Math.max(1, minutes)} Min.`;
 }
 
 function saveTrackedOrders() {
@@ -521,11 +552,28 @@ function renderOrderStatuses() {
         const status = order.status || "new";
         const statusLabel = orderStatusLabels[status] || status;
         const canCancel = Boolean(order.canCancel);
-        const cancelText = canCancel
-            ? `Sie können diese Bestellung noch ${formatCancelTime(order.cancelRemainingSeconds)} Minuten stornieren.`
-            : status === "cancelled"
-                ? "Diese Bestellung wurde storniert."
-                : "Die 5 Minuten zum Stornieren sind abgelaufen oder die Bestellung ist bereits in Bearbeitung.";
+        const canModify = Boolean(order.canModify);
+        const infoLines = [];
+
+        if (status === "cancelled") {
+            infoLines.push("Diese Bestellung wurde storniert.");
+        } else {
+            if (canModify) {
+                const modifyRest = order.modifyRemainingSeconds != null
+                    ? ` (noch ${formatRemainingDuration(order.modifyRemainingSeconds)})`
+                    : "";
+                infoLines.push(`Sie können diese Bestellung noch ändern, z. B. Produkte hinzufügen oder entfernen${modifyRest}.`);
+            }
+
+            if (canCancel) {
+                const cancelRest = order.cancelRemainingSeconds != null
+                    ? ` (noch ${formatRemainingDuration(order.cancelRemainingSeconds)})`
+                    : "";
+                infoLines.push(`Stornieren ist bis 30 Minuten vor Beginn des Lieferzeitfensters möglich${cancelRest}.`);
+            } else {
+                infoLines.push("Stornieren ist nicht mehr möglich, weil das Lieferzeitfenster bald beginnt oder die Bestellung bereits in Bearbeitung ist.");
+            }
+        }
 
         return `
             <article class="order-status-card ${escapeHtml(status)}">
@@ -533,12 +581,14 @@ function renderOrderStatuses() {
                     <div>
                         <h3>Bestellung vom ${formatOrderDate(order.createdAt)}</h3>
                         <p>Bestellnummer: ${escapeHtml(order.orderId)}</p>
+                        ${order.deliveryTime ? `<p>Lieferung: ${escapeHtml(order.deliveryTime)}</p>` : ""}
                     </div>
                     <span class="order-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
                 </div>
-                <p>${escapeHtml(cancelText)}</p>
+                ${infoLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
                 ${order.cancelReason ? `<p>${escapeHtml(order.cancelReason)}</p>` : ""}
                 <div class="order-status-actions">
+                    ${canModify ? `<button class="modify-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung ändern</button>` : ""}
                     ${canCancel ? `<button class="cancel-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung stornieren</button>` : ""}
                     <button class="remove-status-button" type="button" data-id="${escapeHtml(order.orderId)}">Aus Liste entfernen</button>
                 </div>
@@ -595,6 +645,175 @@ function removeTrackedOrder(orderId) {
     state.trackedOrders = state.trackedOrders.filter((order) => order.orderId !== orderId);
     saveTrackedOrders();
     renderOrderStatuses();
+}
+
+async function fetchOrderDetail(orderId) {
+    const response = await fetch(`${ORDER_ENDPOINT}/${encodeURIComponent(orderId)}`);
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || !result.ok) {
+        throw new Error(result.error || "order_detail_failed");
+    }
+
+    return result.order;
+}
+
+function renderExistingPhotos() {
+    const photos = state.editingOrder ? state.editingOrder.existingPhotos : [];
+    existingPhotosPanel.hidden = photos.length === 0;
+
+    existingPhotosList.innerHTML = photos.map((photo) => `
+        <article class="photo-card ${photo.keep ? "" : "is-removed"}">
+            <img src="${escapeHtml(photo.url)}" alt="Bisheriges Foto ${escapeHtml(photo.filename)}">
+            <span class="photo-card-name">${escapeHtml(photo.filename)}${photo.keep ? "" : " – wird entfernt"}</span>
+            <button class="toggle-existing-photo ${photo.keep ? "remove-photo" : "keep-photo"}" type="button" data-filename="${escapeHtml(photo.filename)}">
+                ${photo.keep ? "Foto entfernen" : "Foto behalten"}
+            </button>
+        </article>
+    `).join("");
+}
+
+function updateEditModeUi() {
+    const editing = Boolean(state.editingOrder);
+    editOrderBanner.hidden = !editing;
+    editOrderBannerText.textContent = editing
+        ? `Bestellung ${state.editingOrder.orderId} · Lieferung: ${state.editingOrder.deliveryTime || "wie vereinbart"}. Name, Telefon, Adresse und Zeitfenster bleiben unverändert.`
+        : "";
+    submitOrder.textContent = submitButtonLabel();
+    deliveryTimeInput.disabled = editing;
+    customerNameInput.readOnly = editing;
+    customerPhoneInput.readOnly = editing;
+    customerAddressInput.readOnly = editing;
+    checkAddressButton.disabled = editing;
+    renderExistingPhotos();
+}
+
+async function startOrderModification(orderId) {
+    let order;
+    try {
+        order = await fetchOrderDetail(orderId);
+    } catch {
+        showToast("Bestellung konnte nicht geladen werden. Bitte versuchen Sie es erneut.", 4200);
+        return;
+    }
+
+    if (order.status) {
+        upsertTrackedOrder(order.status);
+    }
+
+    if (!order.status?.canModify) {
+        showToast("Diese Bestellung kann nicht mehr geändert werden.", 4200);
+        return;
+    }
+
+    resetProductRows();
+    clearPhotos();
+
+    const customer = order.customer || {};
+    customerNameInput.value = customer.name || "";
+    customerPhoneInput.value = customer.phone || "";
+    customerAddressInput.value = customer.address || "";
+    document.querySelector("#contactWay").value = customer.contactWay || "Telefon";
+    document.querySelector("#deliveryNote").value = customer.deliveryNote === "keine Hinweise" ? "" : (customer.deliveryNote || "");
+    state.coverage = null;
+    addressCheckResult.hidden = true;
+
+    const deliveryValue = customer.deliveryTime || "";
+    deliveryTimeInput.innerHTML = `<option value="${escapeHtml(deliveryValue)}" selected>${escapeHtml(deliveryValue)}</option>`;
+    deliveryTimeInput.value = deliveryValue;
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    state.items = items.map((item) => ({
+        id: createId(),
+        name: item.name || "",
+        quantity: item.quantity || "",
+        supermarket: item.supermarket || "Egal",
+        preference: item.preference === "cheapest" ? "cheapest" : "specific",
+        details: item.details || "",
+        photos: [],
+    }));
+    if (state.items.length === 0) {
+        state.items.push(createEmptyProduct());
+    }
+
+    state.editingOrder = {
+        orderId: order.orderId,
+        deliveryTime: deliveryValue,
+        existingPhotos: (order.photos || []).map((photo) => ({
+            filename: photo.filename,
+            url: photo.url,
+            keep: true,
+        })),
+    };
+
+    const mode = order.entryMode === "products" || items.length > 0 ? "products" : "photo";
+    const modeRadio = document.querySelector(`input[name="entryMode"][value="${mode}"]`);
+    if (modeRadio) {
+        modeRadio.checked = true;
+    }
+    setEntryMode(mode);
+    updateHeavyWarning();
+    render();
+    updateEditModeUi();
+    setStatusPanelOpen(false);
+    document.querySelector("#bestellen")?.scrollIntoView({ behavior: "smooth" });
+    showToast("Ihre Bestellung wurde zum Ändern geladen. Sie können Produkte und Fotos anpassen.", 5200);
+}
+
+function stopOrderModification() {
+    state.editingOrder = null;
+    resetProductRows();
+    clearPhotos();
+    itemForm.reset();
+    customerForm.reset();
+    state.coverage = null;
+    addressCheckResult.hidden = true;
+    const photoRadio = document.querySelector('input[name="entryMode"][value="photo"]');
+    if (photoRadio) {
+        photoRadio.checked = true;
+    }
+    setEntryMode("photo");
+    renderDeliveryTimeOptions();
+    render();
+    updateEditModeUi();
+}
+
+async function submitModificationToServer() {
+    const formData = new FormData();
+    formData.append("orderText", state.currentOrderText);
+    formData.append("payload", JSON.stringify(buildOrderPayload()));
+    formData.append("keepPhotos", JSON.stringify(keptExistingPhotos().map((photo) => photo.filename)));
+
+    getFilledItems().forEach((item) => {
+        item.photos.forEach((photo) => {
+            formData.append("photos", photo.file, `${photo.uploadPrefix}-${photo.name}`);
+        });
+    });
+
+    if (isPhotoEntryMode()) {
+        state.photos.forEach((photo) => {
+            formData.append("photos", photo.file, `${photo.uploadPrefix}-${photo.name}`);
+        });
+    }
+
+    const response = await fetch(`${ORDER_ENDPOINT}/${encodeURIComponent(state.editingOrder.orderId)}/modify`, {
+        method: "POST",
+        body: formData,
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || !result.ok) {
+        if (response.status === 413) {
+            throw new Error("too_large");
+        }
+        if (result.order) {
+            upsertTrackedOrder(result.order);
+        }
+        throw new Error(result.error || "modify_failed");
+    }
+
+    return result;
 }
 
 function buildLoyaltySuccessMessage(result) {
@@ -803,7 +1022,8 @@ function renderPhotos() {
 }
 
 function renderModalPhotos() {
-    const photos = getAllPhotos();
+    const keptPhotos = keptExistingPhotos().map((photo) => ({ url: photo.url, name: `${photo.filename} (bereits hochgeladen)` }));
+    const photos = [...keptPhotos, ...getAllPhotos()];
 
     if (photos.length === 0) {
         modalPhotoList.hidden = true;
@@ -1224,15 +1444,24 @@ function buildOrderText() {
             return `${index + 1}. ${quantity} ${name} | ${item.supermarket} | ${preferenceText}${details}${photos}`;
         }).join("\n")
         : "Keine Produkte als Zeile eingetragen. Bitte zusätzliche Fotos prüfen.";
-    const extraPhotoLines = state.photos.length
-        ? state.photos.map((photo, index) => `${index + 1}. ${photo.name}`).join("\n")
+    const keptPhotos = keptExistingPhotos();
+    const allExtraPhotoNames = [
+        ...keptPhotos.map((photo) => `${photo.filename} (bereits hochgeladen)`),
+        ...state.photos.map((photo) => photo.name),
+    ];
+    const extraPhotoLines = allExtraPhotoNames.length
+        ? allExtraPhotoNames.map((name, index) => `${index + 1}. ${name}`).join("\n")
         : "keine zusätzlichen Fotos";
 
     const surchargeRule = stats.count >= 2
         ? `${stats.count} Märkte × ${formatEuro(MULTI_MARKET_FEE)} = ${formatEuro(stats.surcharge)}`
         : "0,00 €";
 
-    return `NEUE EINKAUFSBESTELLUNG
+    const heading = state.editingOrder
+        ? `GEÄNDERTE EINKAUFSBESTELLUNG (${state.editingOrder.orderId})`
+        : "NEUE EINKAUFSBESTELLUNG";
+
+    return `${heading}
 
 Kontaktdaten
 Name: ${customer.name}
@@ -1402,6 +1631,10 @@ function uploadErrorMessage(error) {
         return "Dieses Lieferzeitfenster ist leider schon voll. Bitte wählen Sie ein anderes Zeitfenster.";
     }
 
+    if (code === "modify_not_allowed") {
+        return "Diese Bestellung kann nicht mehr geändert werden. Der Bestellschluss für das Zeitfenster ist vorbei oder der Einkauf läuft bereits.";
+    }
+
     return "Senden nicht möglich. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.";
 }
 
@@ -1421,28 +1654,30 @@ async function openOrderModal() {
         return;
     }
 
-    submitOrder.disabled = true;
-    submitOrder.textContent = "Adresse wird geprüft ...";
+    // Beim Ändern bleibt die geprüfte Adresse fest, daher keine erneute Adressprüfung.
+    if (!state.editingOrder) {
+        submitOrder.disabled = true;
+        submitOrder.textContent = "Adresse wird geprüft ...";
 
-    const coverage = await checkAddressSupport();
+        const coverage = await checkAddressSupport();
 
-    if (!coverage) {
         submitOrder.disabled = false;
-        submitOrder.textContent = "Bestellung absenden";
-        return;
-    }
+        submitOrder.textContent = submitButtonLabel();
 
-    submitOrder.disabled = false;
-    submitOrder.textContent = "Bestellung absenden";
+        if (!coverage) {
+            return;
+        }
 
-    if (!coverage.withinServiceArea) {
-        showToast("Diese Adresse liegt leider noch außerhalb unseres aktuellen Test-Liefergebiets in Rheydt-Odenkirchen.", 7200);
-        return;
+        if (!coverage.withinServiceArea) {
+            showToast("Diese Adresse liegt leider noch außerhalb unseres aktuellen Test-Liefergebiets in Rheydt-Odenkirchen.", 7200);
+            return;
+        }
     }
 
     state.currentOrderText = buildOrderText();
     renderCustomerOrderSummary();
     renderModalPhotos();
+    confirmOrder.textContent = state.editingOrder ? "Änderung bestätigen" : "Bestellung bestätigen";
     orderModal.hidden = false;
     closeModal.focus();
 }
@@ -1451,7 +1686,37 @@ function closeOrderModal() {
     orderModal.hidden = true;
 }
 
+async function finishOrderModification() {
+    confirmOrder.disabled = true;
+    confirmOrder.textContent = "Wird gespeichert ...";
+
+    try {
+        const result = await submitModificationToServer();
+        closeOrderModal();
+        if (result.orderStatus) {
+            upsertTrackedOrder(result.orderStatus);
+        }
+        stopOrderModification();
+        showToast(`Ihre Bestellung wurde geändert. Nummer: ${result.orderId}`, 6200);
+    } catch (error) {
+        showToast(uploadErrorMessage(error), 6200);
+        if (error?.message === "modify_not_allowed") {
+            closeOrderModal();
+            stopOrderModification();
+            refreshTrackedOrders();
+        }
+    } finally {
+        confirmOrder.disabled = false;
+        confirmOrder.textContent = state.editingOrder ? "Änderung bestätigen" : "Bestellung bestätigen";
+    }
+}
+
 async function finishOrder() {
+    if (state.editingOrder) {
+        await finishOrderModification();
+        return;
+    }
+
     confirmOrder.disabled = true;
     confirmOrder.textContent = "Wird gesendet ...";
 
@@ -1581,7 +1846,37 @@ submitOrder.addEventListener("click", openOrderModal);
 closeModal.addEventListener("click", closeOrderModal);
 confirmOrder.addEventListener("click", finishOrder);
 
+cancelEditOrderButton.addEventListener("click", () => {
+    stopOrderModification();
+    showToast("Änderung abgebrochen. Ihre Bestellung bleibt unverändert.", 4200);
+});
+
+existingPhotosList.addEventListener("click", (event) => {
+    const toggleButton = event.target.closest(".toggle-existing-photo");
+    if (!toggleButton || !state.editingOrder) {
+        return;
+    }
+
+    const photo = state.editingOrder.existingPhotos.find((currentPhoto) => currentPhoto.filename === toggleButton.dataset.filename);
+    if (!photo) {
+        return;
+    }
+
+    photo.keep = !photo.keep;
+    renderExistingPhotos();
+    renderSummary();
+});
+
 orderStatusList.addEventListener("click", async (event) => {
+    const modifyButton = event.target.closest(".modify-order-button");
+    if (modifyButton) {
+        modifyButton.disabled = true;
+        modifyButton.textContent = "Wird geladen ...";
+        await startOrderModification(modifyButton.dataset.id);
+        renderOrderStatuses();
+        return;
+    }
+
     const cancelButton = event.target.closest(".cancel-order-button");
     if (cancelButton) {
         cancelButton.disabled = true;
