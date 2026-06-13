@@ -519,10 +519,6 @@ function loadTrackedOrders() {
     }
 }
 
-function isMobileStatusPanel() {
-    return window.matchMedia("(max-width: 680px)").matches;
-}
-
 function setStatusPanelOpen(open) {
     orderStatusSection.classList.toggle("is-open", open);
     orderStatusSection.classList.toggle("is-collapsed", !open);
@@ -1777,12 +1773,9 @@ async function finishOrder() {
         }
         if (result.orderStatus) {
             upsertTrackedOrder(result.orderStatus);
-            if (isMobileStatusPanel()) {
-                setStatusPanelOpen(false);
-                statusPanelToggle.focus({ preventScroll: true });
-            } else {
-                orderStatusSection.focus({ preventScroll: true });
-            }
+            // Panel eingeklappt lassen; es öffnet sich erst, wenn der Kunde darauf tippt.
+            setStatusPanelOpen(false);
+            statusPanelToggle.focus({ preventScroll: true });
         }
         refreshCapacity();
         showToast(buildLoyaltySuccessMessage(result), 6200);
