@@ -1656,6 +1656,56 @@ body.dark-mode .order-status-badge.shopping {
     font-weight: 800;
 }
 
+/* ---------- Stornieren: Sicherheitsabfrage ---------- */
+
+.cancel-confirm {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: 2px solid var(--warning);
+    border-radius: var(--radius-small);
+    background: var(--warning-soft);
+}
+
+.cancel-confirm-text {
+    margin: 0;
+    color: var(--warning);
+    font-size: 1.08rem;
+    font-weight: 800;
+}
+
+.cancel-confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.confirm-cancel-no {
+    min-height: 52px;
+    padding: 10px 22px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 800;
+}
+
+body.dark-mode .confirm-cancel-no {
+    color: #1a1208;
+}
+
+.confirm-cancel-yes {
+    min-height: 52px;
+    padding: 10px 22px;
+    border: 2px solid var(--warning);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--warning);
+    cursor: pointer;
+    font-weight: 800;
+}
+
 /* ---------- Anzahlung (Altbestand) ---------- */
 
 .post-submit-deposit-reminder {

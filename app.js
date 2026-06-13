@@ -57,6 +57,7 @@ const state = {
     entryMode: "photo",
     capacity: null,
     editingOrder: null,
+    pendingCancelId: null,
 };
 
 const itemForm = document.querySelector("#itemForm");
@@ -610,11 +611,21 @@ function renderOrderStatuses() {
                 </div>
                 ${infoLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
                 ${order.cancelReason ? `<p>${escapeHtml(order.cancelReason)}</p>` : ""}
-                <div class="order-status-actions">
-                    ${canModify ? `<button class="modify-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung ändern</button>` : ""}
-                    ${canCancel ? `<button class="cancel-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung stornieren</button>` : ""}
-                    <button class="remove-status-button" type="button" data-id="${escapeHtml(order.orderId)}">Aus Liste entfernen</button>
-                </div>
+                ${state.pendingCancelId === order.orderId ? `
+                    <div class="cancel-confirm">
+                        <p class="cancel-confirm-text">Möchten Sie diese Bestellung wirklich stornieren? Das lässt sich nicht rückgängig machen.</p>
+                        <div class="cancel-confirm-actions">
+                            <button class="confirm-cancel-no" type="button" data-id="${escapeHtml(order.orderId)}">Nein, behalten</button>
+                            <button class="confirm-cancel-yes" type="button" data-id="${escapeHtml(order.orderId)}">Ja, stornieren</button>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="order-status-actions">
+                        ${canModify ? `<button class="modify-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung ändern</button>` : ""}
+                        ${canCancel ? `<button class="cancel-order-button" type="button" data-id="${escapeHtml(order.orderId)}">Bestellung stornieren</button>` : ""}
+                        <button class="remove-status-button" type="button" data-id="${escapeHtml(order.orderId)}">Aus Liste entfernen</button>
+                    </div>
+                `}
             </article>
         `;
     }).join("");
@@ -1914,12 +1925,29 @@ orderStatusList.addEventListener("click", async (event) => {
         return;
     }
 
+    // Erster Klick: Sicherheitsabfrage einblenden, noch nicht stornieren.
     const cancelButton = event.target.closest(".cancel-order-button");
     if (cancelButton) {
-        cancelButton.disabled = true;
-        cancelButton.textContent = "Wird storniert ...";
+        state.pendingCancelId = cancelButton.dataset.id;
+        renderOrderStatuses();
+        return;
+    }
+
+    const confirmNoButton = event.target.closest(".confirm-cancel-no");
+    if (confirmNoButton) {
+        state.pendingCancelId = null;
+        renderOrderStatuses();
+        return;
+    }
+
+    // Zweiter Klick: Stornierung bestätigt.
+    const confirmYesButton = event.target.closest(".confirm-cancel-yes");
+    if (confirmYesButton) {
+        state.pendingCancelId = null;
+        confirmYesButton.disabled = true;
+        confirmYesButton.textContent = "Wird storniert ...";
         try {
-            await cancelTrackedOrder(cancelButton.dataset.id);
+            await cancelTrackedOrder(confirmYesButton.dataset.id);
         } catch {
             showToast("Bestellung kann nicht mehr storniert werden.", 4200);
             await refreshTrackedOrders();
