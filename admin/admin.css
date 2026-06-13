@@ -1,28 +1,29 @@
 /* ============================================================
-   Besorgly Admin – „Frischer Markt“ Redesign
+   Besorgly Admin – Orange (Logo-Look)
    Gleiche Designsprache wie die Kundenseite:
-   warmes Papier, Marktgrün, Bernstein-Akzent, Serifen-Titel.
+   warmes Papier, Logo-Orange, Anthrazit, Serifen-Titel.
    ============================================================ */
 
 :root {
-    --bg: #f4f1e8;
+    --bg: #fdf6ef;
     --card: #ffffff;
-    --card-soft: #faf7ef;
-    --text: #1c2823;
-    --muted: #59655d;
-    --border: #e0d9c8;
-    --border-strong: #cfc5ac;
-    --primary: #1e6b45;
-    --primary-dark: #124530;
-    --primary-soft: #e4f1e9;
-    --accent: #e08a00;
-    --accent-dark: #8f5500;
-    --accent-soft: #fcf0d9;
+    --card-soft: #fcefe4;
+    --text: #22262d;
+    --muted: #4f555d;
+    --border: #ead9c7;
+    --border-strong: #d3c0a8;
+    --primary: #e0500a;
+    --primary-bright: #fd5701;
+    --primary-dark: #a83c08;
+    --primary-soft: #ffe6d6;
+    --accent: #fd5701;
+    --accent-dark: #a83c08;
+    --accent-soft: #ffe6d6;
     --danger: #b3402f;
     --danger-soft: #fbeae5;
     --warning: #a06000;
     --success: #1e6b45;
-    --shadow: 0 1px 2px rgba(28, 40, 35, 0.05), 0 14px 36px rgba(28, 40, 35, 0.09);
+    --shadow: 0 1px 2px rgba(34, 38, 45, 0.05), 0 14px 36px rgba(34, 38, 45, 0.09);
     --radius: 18px;
     --font-display: Georgia, "Times New Roman", "Noto Serif", serif;
     --font-body: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
@@ -40,7 +41,7 @@ body {
     margin: 0;
     min-height: 100vh;
     background:
-        radial-gradient(circle at 0% 0%, rgba(30, 107, 69, 0.06), transparent 24rem),
+        radial-gradient(circle at 0% 0%, rgba(253, 87, 1, 0.06), transparent 24rem),
         var(--bg);
     color: var(--text);
     font-family: var(--font-body);
@@ -203,9 +204,9 @@ textarea {
 }
 
 .button-primary {
-    background: linear-gradient(160deg, var(--primary), var(--primary-dark));
+    background: linear-gradient(160deg, var(--primary-bright), var(--primary));
     color: #fff;
-    box-shadow: 0 8px 18px rgba(18, 69, 48, 0.24);
+    box-shadow: 0 8px 18px rgba(224, 80, 10, 0.26);
 }
 
 .button-secondary {
@@ -316,7 +317,7 @@ textarea {
     border-color: var(--primary);
     background: var(--primary-soft);
     color: var(--primary-dark);
-    box-shadow: 0 0 0 3px rgba(30, 107, 69, 0.14);
+    box-shadow: 0 0 0 3px rgba(253, 87, 1, 0.16);
 }
 
 .view-tab.active .tab-icon {
@@ -603,7 +604,7 @@ textarea {
 .order-card.active {
     border-color: var(--primary);
     border-left-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(30, 107, 69, 0.14);
+    box-shadow: 0 0 0 3px rgba(253, 87, 1, 0.16);
 }
 
 .order-card-header {
@@ -658,7 +659,7 @@ textarea {
 
 .status.accepted,
 .status.delivered {
-    background: var(--primary-soft);
+    background: #dff0e4;
     color: var(--success);
 }
 

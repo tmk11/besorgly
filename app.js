@@ -67,6 +67,7 @@ const loyaltyAddressInput = document.querySelector("#loyaltyAddress");
 const loyaltyAddressResult = document.querySelector("#loyaltyAddressResult");
 const loyaltyResult = document.querySelector("#loyaltyResult");
 const contrastToggle = document.querySelector("#contrastToggle");
+const textSizeToggle = document.querySelector("#textSizeToggle");
 const customerNameInput = document.querySelector("#customerName");
 const customerPhoneInput = document.querySelector("#customerPhone");
 const customerAddressInput = document.querySelector("#customerAddress");
@@ -433,9 +434,24 @@ function updatePreferenceUi() {
 function setContrastMode(enabled) {
     document.body.classList.toggle("dark-mode", enabled);
     contrastToggle.setAttribute("aria-pressed", String(enabled));
-    contrastToggle.textContent = enabled ? "Heller Modus" : "Dunkelmodus";
+    contrastToggle.setAttribute("aria-label", enabled ? "Hellen Modus einschalten" : "Dunkelmodus einschalten");
+    contrastToggle.innerHTML = enabled
+        ? '<span aria-hidden="true">☀️</span> <span class="btn-word">Heller Modus</span>'
+        : '<span aria-hidden="true">🌙</span> <span class="btn-word">Dunkelmodus</span>';
     localStorage.setItem("darkMode", enabled ? "true" : "false");
     localStorage.removeItem("contrastMode");
+}
+
+function setLargeText(enabled) {
+    document.documentElement.classList.toggle("large-text", enabled);
+    if (textSizeToggle) {
+        textSizeToggle.setAttribute("aria-pressed", String(enabled));
+        textSizeToggle.setAttribute("aria-label", enabled ? "Schrift verkleinern" : "Schrift vergrößern");
+        textSizeToggle.innerHTML = enabled
+            ? '<span aria-hidden="true">A−</span> <span class="btn-word">Kleiner</span>'
+            : '<span aria-hidden="true">A+</span> <span class="btn-word">Größer</span>';
+    }
+    localStorage.setItem("largeText", enabled ? "true" : "false");
 }
 
 function renderLoyaltyResult(loyalty) {
@@ -1786,6 +1802,10 @@ contrastToggle.addEventListener("click", () => {
     setContrastMode(!document.body.classList.contains("dark-mode"));
 });
 
+textSizeToggle?.addEventListener("click", () => {
+    setLargeText(!document.documentElement.classList.contains("large-text"));
+});
+
 statusPanelToggle.addEventListener("click", () => {
     setStatusPanelOpen(!orderStatusSection.classList.contains("is-open"));
 });
@@ -1940,6 +1960,7 @@ renderDeliveryTimeOptions();
 setEntryMode(document.querySelector('input[name="entryMode"]:checked')?.value || "photo");
 render();
 setContrastMode(localStorage.getItem("darkMode") === "true" || localStorage.getItem("contrastMode") === "true");
+setLargeText(localStorage.getItem("largeText") === "true");
 loadTrackedOrders();
 renderOrderStatuses();
 refreshTrackedOrders();
