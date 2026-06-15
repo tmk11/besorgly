@@ -69,10 +69,6 @@ html {
     font-size: 20px;           /* größere Grundschrift für Seniorinnen und Senioren */
 }
 
-html.large-text {
-    font-size: 24px;           /* „Schrift größer“-Schalter */
-}
-
 body {
     margin: 0;
     min-height: 100vh;
@@ -176,7 +172,6 @@ body.dark-mode .top-header {
 
 /* ---------- Buttons ---------- */
 
-.text-size-toggle,
 .contrast-toggle,
 .quick-order,
 .button {
@@ -194,7 +189,6 @@ body.dark-mode .top-header {
     transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.text-size-toggle,
 .contrast-toggle,
 .button-secondary {
     border: 2px solid var(--primary);
@@ -202,19 +196,16 @@ body.dark-mode .top-header {
     color: var(--primary-dark);
 }
 
-.text-size-toggle:hover,
 .contrast-toggle:hover,
 .button-secondary:hover {
     background: var(--primary-soft);
 }
 
-.text-size-toggle[aria-pressed="true"],
 .contrast-toggle[aria-pressed="true"] {
     background: var(--primary);
     color: #ffffff;
 }
 
-body.dark-mode .text-size-toggle[aria-pressed="true"],
 body.dark-mode .contrast-toggle[aria-pressed="true"] {
     color: #1a1208;
 }
@@ -2170,10 +2161,6 @@ body.dark-mode .summary-item-number {
         font-size: 19px;
     }
 
-    html.large-text {
-        font-size: 22px;
-    }
-
     .header-inner,
     .order-status-top,
     .order-status-actions,
@@ -2212,7 +2199,6 @@ body.dark-mode .summary-item-number {
         border-radius: 12px;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle,
     .header-actions .quick-order {
         min-height: 44px;
@@ -2228,7 +2214,6 @@ body.dark-mode .summary-item-number {
         display: none;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle {
         padding: 8px 13px;
         font-size: 1.05rem;
@@ -2421,14 +2406,12 @@ body.dark-mode .summary-item-number {
         align-items: center;
     }
 
-    .text-size-toggle,
     .contrast-toggle,
     .quick-order,
     .button {
         width: 100%;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle,
     .header-actions .quick-order {
         width: auto;
