@@ -1515,28 +1515,24 @@ body.dark-mode .status-panel-count {
 }
 
 .order-status-section .section-title {
-    position: sticky;
-    top: -16px;
-    z-index: 1;
     margin: -16px -16px 14px;
-    padding: 16px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    border-radius: 18px 18px 0 0;
     background: var(--surface);
 }
 
 .order-status-section .section-title span {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     color: var(--accent-dark);
 }
 
 .order-status-section .section-title h2 {
-    margin-bottom: 6px;
-    font-size: clamp(1.5rem, 4vw, 2rem);
+    margin-bottom: 4px;
+    font-size: clamp(1.15rem, 3vw, 1.35rem);
 }
 
 .order-status-section .section-title p {
-    font-size: 1.02rem;
+    font-size: 0.92rem;
     font-weight: 600;
     color: var(--muted);
 }
@@ -2376,9 +2372,8 @@ body.dark-mode .summary-item-number {
     }
 
     .order-status-section .section-title {
-        top: -12px;
         margin: -12px -12px 12px;
-        padding: 14px;
+        padding: 12px 14px;
     }
 
     .toast {
