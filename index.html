@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Besorgly: Einfacher Einkaufsservice für ältere Menschen: Netto, dm, Lidl und Aldi.">
     <title>Besorgly | Einkauf einfach bestellen</title>
-    <link rel="stylesheet" href="styles.css?v=cancelconfirm-20260613">
+    <link rel="stylesheet" href="styles.css?v=panel-cleanup-20260615">
 </head>
 <body>
     <header class="top-header" id="top">
@@ -15,9 +15,6 @@
             </a>
 
             <div class="header-actions">
-                <button class="text-size-toggle" id="textSizeToggle" type="button" aria-pressed="false" aria-label="Schrift vergrößern">
-                    <span aria-hidden="true">A+</span> <span class="btn-word">Größer</span>
-                </button>
                 <button class="contrast-toggle" id="contrastToggle" type="button" aria-pressed="false" aria-label="Dunkelmodus einschalten">
                     <span aria-hidden="true">🌙</span> <span class="btn-word">Dunkelmodus</span>
                 </button>
@@ -354,7 +351,6 @@
             </button>
             <div class="status-panel-body" id="statusPanelBody">
                 <div class="section-title">
-                    <span>Immer sichtbar</span>
                     <h2 id="order-status-title">Bestellung verfolgen</h2>
                     <p>Der aktuelle Stand bleibt hier sichtbar. Ändern können Sie Ihre Bestellung bis zum Bestellschluss des Zeitfensters, stornieren bis 30 Minuten vor Beginn der Lieferung.</p>
                 </div>
@@ -402,6 +398,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="app.js?v=cancelconfirm-20260613"></script>
+    <script src="app.js?v=panel-cleanup-20260615"></script>
 </body>
 </html>

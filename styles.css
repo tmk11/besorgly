@@ -69,10 +69,6 @@ html {
     font-size: 20px;           /* größere Grundschrift für Seniorinnen und Senioren */
 }
 
-html.large-text {
-    font-size: 24px;           /* „Schrift größer“-Schalter */
-}
-
 body {
     margin: 0;
     min-height: 100vh;
@@ -176,7 +172,6 @@ body.dark-mode .top-header {
 
 /* ---------- Buttons ---------- */
 
-.text-size-toggle,
 .contrast-toggle,
 .quick-order,
 .button {
@@ -194,7 +189,6 @@ body.dark-mode .top-header {
     transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.text-size-toggle,
 .contrast-toggle,
 .button-secondary {
     border: 2px solid var(--primary);
@@ -202,19 +196,16 @@ body.dark-mode .top-header {
     color: var(--primary-dark);
 }
 
-.text-size-toggle:hover,
 .contrast-toggle:hover,
 .button-secondary:hover {
     background: var(--primary-soft);
 }
 
-.text-size-toggle[aria-pressed="true"],
 .contrast-toggle[aria-pressed="true"] {
     background: var(--primary);
     color: #ffffff;
 }
 
-body.dark-mode .text-size-toggle[aria-pressed="true"],
 body.dark-mode .contrast-toggle[aria-pressed="true"] {
     color: #1a1208;
 }
@@ -1515,28 +1506,24 @@ body.dark-mode .status-panel-count {
 }
 
 .order-status-section .section-title {
-    position: sticky;
-    top: -16px;
-    z-index: 1;
     margin: -16px -16px 14px;
-    padding: 16px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    border-radius: 18px 18px 0 0;
     background: var(--surface);
 }
 
 .order-status-section .section-title span {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     color: var(--accent-dark);
 }
 
 .order-status-section .section-title h2 {
-    margin-bottom: 6px;
-    font-size: clamp(1.5rem, 4vw, 2rem);
+    margin-bottom: 4px;
+    font-size: clamp(1.15rem, 3vw, 1.35rem);
 }
 
 .order-status-section .section-title p {
-    font-size: 1.02rem;
+    font-size: 0.92rem;
     font-weight: 600;
     color: var(--muted);
 }
@@ -2174,10 +2161,6 @@ body.dark-mode .summary-item-number {
         font-size: 19px;
     }
 
-    html.large-text {
-        font-size: 22px;
-    }
-
     .header-inner,
     .order-status-top,
     .order-status-actions,
@@ -2216,7 +2199,6 @@ body.dark-mode .summary-item-number {
         border-radius: 12px;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle,
     .header-actions .quick-order {
         min-height: 44px;
@@ -2232,7 +2214,6 @@ body.dark-mode .summary-item-number {
         display: none;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle {
         padding: 8px 13px;
         font-size: 1.05rem;
@@ -2376,9 +2357,8 @@ body.dark-mode .summary-item-number {
     }
 
     .order-status-section .section-title {
-        top: -12px;
         margin: -12px -12px 12px;
-        padding: 14px;
+        padding: 12px 14px;
     }
 
     .toast {
@@ -2426,14 +2406,12 @@ body.dark-mode .summary-item-number {
         align-items: center;
     }
 
-    .text-size-toggle,
     .contrast-toggle,
     .quick-order,
     .button {
         width: 100%;
     }
 
-    .header-actions .text-size-toggle,
     .header-actions .contrast-toggle,
     .header-actions .quick-order {
         width: auto;
